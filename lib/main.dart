@@ -318,7 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// نماذج البيانات
+// النماذج والإشعارات المحلية
 class NotificationItem {
   final String id;
   final String title;
@@ -370,21 +370,6 @@ void addAppNotification({
   );
 }
 
-class ChatMessage {
-  final String id;
-  String senderName;
-  String text;
-  bool isAdmin;
-
-  ChatMessage({
-    required this.id,
-    required this.senderName,
-    required this.text,
-    required this.isAdmin,
-  });
-}
-
-Map<String, List<ChatMessage>> globalChats = {};
 List<String> globalCategories = ['الكل', 'عمارة', 'أسنان', 'مدنية', 'معلوماتية', 'بشرية', 'ديكور'];
 
 // ----------------- واجهة المتجر الرئيسية -----------------
@@ -423,6 +408,32 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _addSampleProductForTest() async {
+    try {
+      await FirebaseFirestore.instance.collection('products').add({
+        'title': 'طقم أدوات هندسية معماري',
+        'price': '45000 ل.س',
+        'priceNum': 45000,
+        'category': 'عمارة',
+        'image': 'https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=400',
+        'description': 'طقم هندسي متكامل لطلاب الهندسة المعمارية بجودة عالية.',
+        'ratings': {},
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تمت إضافة منتج تجريبي بنجاح!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e')),
+        );
+      }
+    }
+  }
+
   void _addToCart(Map<String, dynamic> product) {
     userCarts.putIfAbsent(widget.userName, () => []);
     List<CartItem> cart = userCarts[widget.userName]!;
@@ -437,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('تمت إضافة (${product['title']}) إلى سلة المشتريات للشراء لاحقاً 🛒'),
+        content: Text('تمت إضافة (${product['title']}) إلى سلة المشتريات 🛒'),
         duration: const Duration(seconds: 2),
         action: SnackBarAction(
           label: 'عرض السلة',
@@ -484,7 +495,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Icon(Icons.shopping_cart, color: Color(0xFFE5C158), size: 26),
                           SizedBox(width: 10),
                           Text(
-                            'سلة المشتريات (للشراء لاحقاً)',
+                            'سلة المشتريات',
                             style: TextStyle(color: Color(0xFFE5C158), fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -621,7 +632,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _checkoutCart(List<CartItem> cart, int totalSum) {
+  void _checkoutCart(List<CartItem> cart, int totalSum) async {
     final deliveryPhoneController = TextEditingController(text: widget.userPhone);
     final universityController = TextEditingController();
     String paymentMethod = 'نقدي عند الاستلام';
@@ -687,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: (deliveryPhoneController.text.trim().isEmpty ||
                           universityController.text.trim().isEmpty)
                       ? null
-                      : () {
+                      : () async {
                           Navigator.pop(context);
 
                           String itemsSummary = cart
@@ -703,24 +714,23 @@ class _HomeScreenState extends State<HomeScreen> {
                               "- رقم التواصل للتسليم: ${deliveryPhoneController.text.trim()}\n"
                               "- الجامعة: ${universityController.text.trim()}";
 
-                          globalChats.putIfAbsent(widget.userName, () => []);
-                          globalChats[widget.userName]!.add(
-                            ChatMessage(
-                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                              senderName: widget.userName,
-                              text: orderMsg,
-                              isAdmin: false,
-                            ),
-                          );
+                          try {
+                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                              'senderName': widget.userName,
+                              'text': orderMsg,
+                              'isAdmin': false,
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
 
-                          globalChats[widget.userName]!.add(
-                            ChatMessage(
-                              id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-                              senderName: 'الإدارة',
-                              text: 'مرحباً بك، تم تلقي طلب السلة بنجاح. يرجى الانتظار لحين تأكيده.',
-                              isAdmin: true,
-                            ),
-                          );
+                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                              'senderName': 'الإدارة',
+                              'text': 'مرحباً بك، تم تلقي طلب السلة بنجاح. يرجى الانتظار لحين تأكيده.',
+                              'isAdmin': true,
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
+                          } catch (e) {
+                            debugPrint("Error sending order: $e");
+                          }
 
                           addAppNotification(
                             targetUserName: widget.userName,
@@ -739,7 +749,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             MaterialPageRoute(
                               builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
                             ),
-                          ).then((_) => setState(() {}));
+                          );
                         },
                   child: const Text('تأكيد الإرسال للإدارة'),
                 ),
@@ -933,7 +943,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     const SizedBox(height: 15),
-                    const Text('رقم التواصل (حتى نتواصل معك من أجل التسليم) *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5C158))),
+                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5C158))),
                     const SizedBox(height: 8),
                     TextField(
                       controller: deliveryPhoneController,
@@ -945,7 +955,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 15),
-                    const Text('اسم الجامعة التي تريد استلام المنتج منها *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5C158))),
+                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5C158))),
                     const SizedBox(height: 8),
                     TextField(
                       controller: universityController,
@@ -967,42 +977,41 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: (deliveryPhoneController.text.trim().isEmpty ||
                           universityController.text.trim().isEmpty)
                       ? null
-                      : () {
+                      : () async {
                           Navigator.pop(context);
 
                           String orderMsg = "📦 طلب منتج جديد:\n"
                               "👤 الزبون: ${widget.userName}\n"
-                              "📱 رقم الهاتف المسجل: ${widget.userPhone}\n"
+                              "📱 رقم الهاتف: ${widget.userPhone}\n"
                               "- المنتج: ${product['title']}\n"
                               "- السعر الفردي: ${product['price']}\n"
                               "- عدد القطع: $quantity\n"
-                              "- طريقة الدفع: $paymentMethod\n"
-                              "- رقم التواصل للتسليم: ${deliveryPhoneController.text.trim()}\n"
-                              "- الجامعة المراد استلام المنتج منها: ${universityController.text.trim()}";
+                              "- الدفع: $paymentMethod\n"
+                              "- هاتف التسليم: ${deliveryPhoneController.text.trim()}\n"
+                              "- الجامعة: ${universityController.text.trim()}";
 
-                          globalChats.putIfAbsent(widget.userName, () => []);
-                          globalChats[widget.userName]!.add(
-                            ChatMessage(
-                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                              senderName: widget.userName,
-                              text: orderMsg,
-                              isAdmin: false,
-                            ),
-                          );
+                          try {
+                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                              'senderName': widget.userName,
+                              'text': orderMsg,
+                              'isAdmin': false,
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
 
-                          globalChats[widget.userName]!.add(
-                            ChatMessage(
-                              id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-                              senderName: 'الإدارة',
-                              text: 'مرحباً بك، تم تلقي طلبك بنجاح. يرجى الانتظار حتى تأكيد الطلب من قبل الإدارة.',
-                              isAdmin: true,
-                            ),
-                          );
+                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                              'senderName': 'الإدارة',
+                              'text': 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
+                              'isAdmin': true,
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
+                          } catch (e) {
+                            debugPrint("Error sending order: $e");
+                          }
 
                           addAppNotification(
                             targetUserName: widget.userName,
                             title: 'تم إرسال طلبك بنجاح 📦',
-                            message: 'تم إرسال طلبك (${product['title']}) إلى الإدارة بنجاح وجاري المراجعة.',
+                            message: 'تم إرسال طلبك (${product['title']}) إلى الإدارة بنجاح.',
                             icon: Icons.shopping_bag_outlined,
                             iconColor: const Color(0xFFE5C158),
                           );
@@ -1012,7 +1021,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             MaterialPageRoute(
                               builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
                             ),
-                          ).then((_) => setState(() {}));
+                          );
                         },
                   child: const Text('تأكيد الإرسال للإدارة'),
                 ),
@@ -1041,7 +1050,7 @@ class _HomeScreenState extends State<HomeScreen> {
               IconButton(
                 icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFFE5C158), size: 26),
                 onPressed: _openCartSheet,
-                tooltip: 'سلة المشتريات (للشراء لاحقاً)',
+                tooltip: 'سلة المشتريات',
               ),
               if (cartCount > 0)
                 Positioned(
@@ -1113,7 +1122,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(
                   builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
                 ),
-              ).then((_) => setState(() {}));
+              );
             },
             tooltip: 'محادثة الإدارة',
           ),
@@ -1158,7 +1167,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.shopping_cart, color: Color(0xFFE5C158)),
-              title: Text('سلة المشتريات للشراء لاحقاً ($cartCount)'),
+              title: Text('سلة المشتريات ($cartCount)'),
               onTap: () {
                 Navigator.pop(context);
                 _openCartSheet();
@@ -1199,7 +1208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(
                     builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
                   ),
-                ).then((_) => setState(() {}));
+                );
               },
             ),
             const Divider(color: Colors.white12),
@@ -1253,7 +1262,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'تصفح المستلزمات الطبية والهندسية واطلبها أو ضعها في سلة المشتريات للشراء لاحقاً',
+                          'تصفح المستلزمات الطبية والهندسية واطلبها فوراً عبر المتجر السحابي',
                           style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.2),
                         ),
                       ],
@@ -1341,15 +1350,46 @@ class _HomeScreenState extends State<HomeScreen> {
               stream: FirebaseFirestore.instance.collection('products').snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)));
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Color(0xFFE5C158)),
+                        SizedBox(height: 12),
+                        Text('جاري تحميل المنتجات السحابية...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                      ],
+                    ),
+                  );
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'لا توجد منتجات مضافة بعد. استخدم لوحة الأدمن لإضافة أول منتج!',
-                      style: TextStyle(color: Colors.white38, fontSize: 14),
-                      textAlign: TextAlign.center,
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.inventory_2_outlined, size: 60, color: Color(0xFFE5C158)),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'لا توجد منتجات مضافة بعد في السحابة.',
+                            style: TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'اضغط على الزر أدناه لإضافة منتج تجريبي واختبار العرض:',
+                            style: TextStyle(color: Colors.white38, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _addSampleProductForTest,
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('إضافة منتج تجريبي الآن'),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
@@ -1372,7 +1412,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (filteredProducts.isEmpty) {
                   return const Center(
                     child: Text(
-                      'لا توجد منتجات تطابق البحث',
+                      'لا توجد منتجات تطابق بحثك',
                       style: TextStyle(color: Colors.white38, fontSize: 15),
                     ),
                   );
@@ -1511,7 +1551,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         padding: EdgeInsets.zero,
                                       ),
                                       icon: const Icon(Icons.bookmark_add_outlined, size: 14, color: Color(0xFFE5C158)),
-                                      label: const Text('الوضع في سلة المشتريات للشراء لاحقا', style: TextStyle(fontSize: 9, color: Color(0xFFE5C158))),
+                                      label: const Text('الوضع في سلة المشتريات', style: TextStyle(fontSize: 9, color: Color(0xFFE5C158))),
                                     ),
                                   ),
                                 ],
@@ -1763,7 +1803,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   onPressed: (deliveryPhoneController.text.trim().isEmpty ||
                           universityController.text.trim().isEmpty)
                       ? null
-                      : () {
+                      : () async {
                           Navigator.pop(context);
                           String orderMsg = "📦 طلب منتج جديد:\n"
                               "👤 الزبون: ${widget.userName}\n"
@@ -1775,24 +1815,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               "- هاتف التسليم: ${deliveryPhoneController.text.trim()}\n"
                               "- الجامعة: ${universityController.text.trim()}";
 
-                          globalChats.putIfAbsent(widget.userName, () => []);
-                          globalChats[widget.userName]!.add(
-                            ChatMessage(
-                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                              senderName: widget.userName,
-                              text: orderMsg,
-                              isAdmin: false,
-                            ),
-                          );
+                          try {
+                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                              'senderName': widget.userName,
+                              'text': orderMsg,
+                              'isAdmin': false,
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
 
-                          globalChats[widget.userName]!.add(
-                            ChatMessage(
-                              id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-                              senderName: 'الإدارة',
-                              text: 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
-                              isAdmin: true,
-                            ),
-                          );
+                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                              'senderName': 'الإدارة',
+                              'text': 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
+                              'isAdmin': true,
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
+                          } catch (e) {
+                            debugPrint("Error sending order: $e");
+                          }
 
                           addAppNotification(
                             targetUserName: widget.userName,
@@ -1939,7 +1978,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 side: const BorderSide(color: Color(0xFFE5C158), width: 1.5),
               ),
               icon: const Icon(Icons.bookmark_add_outlined, color: Color(0xFFE5C158)),
-              label: const Text('الوضع في سلة المشتريات للشراء لاحقا', style: TextStyle(color: Color(0xFFE5C158), fontSize: 15)),
+              label: const Text('الوضع في سلة المشتريات', style: TextStyle(color: Color(0xFFE5C158), fontSize: 15)),
             ),
           ],
         ),
@@ -2104,46 +2143,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف القسم بنجاح')));
   }
 
-  void _deleteSingleChat(String studentName) {
-    setState(() {
-      globalChats.remove(studentName);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم حذف محادثة ($studentName) بنجاح')),
-    );
-  }
+  void _deleteSingleChat(String studentName) async {
+    try {
+      var batch = FirebaseFirestore.instance.batch();
+      var snapshots = await FirebaseFirestore.instance.collection('chats').doc(studentName).collection('messages').get();
+      for (var doc in snapshots.docs) {
+        batch.delete(doc.reference);
+      }
+      batch.delete(FirebaseFirestore.instance.collection('chats').doc(studentName));
+      await batch.commit();
 
-  void _deleteAllChats() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF141418),
-        title: const Text('حذف جميع المحادثات', style: TextStyle(color: Colors.redAccent)),
-        content: const Text('هل أنت متأكد من مسح كل محادثات الطلاب نهائياً؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
-              setState(() {
-                globalChats.clear();
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم مسح جميع المحادثات بنجاح')),
-              );
-            },
-            child: const Text('نعم، مسح الكل'),
-          ),
-        ],
-      ),
-    );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم حذف محادثة ($studentName) بنجاح')),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error deleting chat: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    List<String> studentNames = globalChats.keys.toList();
-
     return Scaffold(
       appBar: AppBar(
         title: Text('لوحة الأدمن - ${widget.adminName}'),
@@ -2181,59 +2202,53 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
       ),
       body: _selectedTab == 3
-          ? Row(
-              children: [
-                Container(
-                  width: 320,
-                  color: const Color(0xFF0F0F12),
-                  child: Column(
-                    children: [
-                      if (studentNames.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900),
-                            icon: const Icon(Icons.delete_sweep, color: Colors.white),
-                            label: const Text('حذف جميع المحادثات', style: TextStyle(color: Colors.white)),
-                            onPressed: _deleteAllChats,
-                          ),
-                        ),
-                      Expanded(
-                        child: studentNames.isEmpty
-                            ? const Center(child: Text('لا توجد محادثات حالياً', style: TextStyle(color: Colors.white38)))
-                            : ListView.builder(
-                                itemCount: studentNames.length,
-                                itemBuilder: (context, index) {
-                                  String student = studentNames[index];
-                                  return ListTile(
-                                    leading: const Icon(Icons.person, color: Color(0xFFE5C158)),
-                                    title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
-                                      onPressed: () => _deleteSingleChat(student),
-                                      tooltip: 'حذف محادثة هذا الزبون',
-                                    ),
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => ChatScreen(userName: student, isAdmin: true),
-                                        ),
-                                      ).then((_) => setState(() {}));
-                                    },
-                                  );
-                                },
-                              ),
+          ? StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('chats').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)));
+                }
+                var studentDocs = snapshot.data!.docs;
+
+                return Row(
+                  children: [
+                    Container(
+                      width: 320,
+                      color: const Color(0xFF0F0F12),
+                      child: studentDocs.isEmpty
+                          ? const Center(child: Text('لا توجد محادثات طلاب سحابية حالياً', style: TextStyle(color: Colors.white38)))
+                          : ListView.builder(
+                              itemCount: studentDocs.length,
+                              itemBuilder: (context, index) {
+                                String student = studentDocs[index].id;
+                                return ListTile(
+                                  leading: const Icon(Icons.person, color: Color(0xFFE5C158)),
+                                  title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                                    onPressed: () => _deleteSingleChat(student),
+                                    tooltip: 'حذف محادثة هذا الزبون',
+                                  ),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ChatScreen(userName: student, isAdmin: true),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text('اختر طالباً من القائمة لمتابعة محادثته السحابية', style: TextStyle(color: Colors.white38)),
                       ),
-                    ],
-                  ),
-                ),
-                const Expanded(
-                  child: Center(
-                    child: Text('اختر طالباً من القائمة لمتابعة المحادثة', style: TextStyle(color: Colors.white38)),
-                  ),
-                ),
-              ],
+                    ),
+                  ],
+                );
+              },
             )
           : _selectedTab == 2
               ? Padding(
@@ -2429,7 +2444,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   ElevatedButton(
                                     onPressed: _saveProduct,
                                     style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                                    child: Text(editingProductId == null ? 'نشر المنتج' : 'حفظ التعديلات'),
+                                    child: Text(editingProductId == null ? 'نشر المنتج للسحابة' : 'حفظ التعديلات'),
                                   ),
                                   if (editingProductId != null) ...[
                                     const SizedBox(height: 10),
@@ -2456,7 +2471,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('قائمة المنتجات الحالية', style: TextStyle(color: Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold)),
+                                const Text('قائمة المنتجات الحالية بالسحابة', style: TextStyle(color: Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 10),
                                 Expanded(
                                   child: StreamBuilder<QuerySnapshot>(
@@ -2522,7 +2537,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
-// ----------------- شاشة المحادثة الخاصة -----------------
+// ----------------- شاشة المحادثة الخاصة والسحابية -----------------
 class ChatScreen extends StatefulWidget {
   final String userName;
   final bool isAdmin;
@@ -2534,115 +2549,30 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgController = TextEditingController();
-  Set<String> selectedMessageIds = {};
-  bool isSelectionMode = false;
 
-  void _sendMessage(String text) {
+  void _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
-    setState(() {
-      globalChats.putIfAbsent(widget.userName, () => []);
-      globalChats[widget.userName]!.add(
-        ChatMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          senderName: widget.isAdmin ? 'الإدارة (حيان)' : widget.userName,
-          text: text.trim(),
-          isAdmin: widget.isAdmin,
-        ),
-      );
-    });
+    try {
+      await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+        'senderName': widget.isAdmin ? 'الإدارة (حيان)' : widget.userName,
+        'text': text.trim(),
+        'isAdmin': widget.isAdmin,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Error sending message: $e");
+    }
+
     _msgController.clear();
-  }
-
-  void _deleteSelectedMessages() {
-    setState(() {
-      globalChats[widget.userName]?.removeWhere((msg) => selectedMessageIds.contains(msg.id));
-      selectedMessageIds.clear();
-      isSelectionMode = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الرسائل المحددة')));
-  }
-
-  void _editMessage(ChatMessage msg) {
-    final editController = TextEditingController(text: msg.text);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF141418),
-        title: const Text('تعديل الرسالة', style: TextStyle(color: Color(0xFFE5C158))),
-        content: TextField(
-          controller: editController,
-          maxLines: 3,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              if (editController.text.trim().isNotEmpty) {
-                setState(() {
-                  msg.text = editController.text.trim();
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعديل الرسالة بنجاح')));
-              }
-            },
-            child: const Text('حفظ التعديل'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    List<ChatMessage> messages = globalChats[widget.userName] ?? [];
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isAdmin ? 'محادثة الزبون: ${widget.userName}' : 'محادثتي الخاصة مع الإدارة'),
         backgroundColor: const Color(0xFF141418),
-        actions: [
-          if (widget.isAdmin && messages.isNotEmpty) ...[
-            if (isSelectionMode) ...[
-              IconButton(
-                icon: const Icon(Icons.delete, color: Colors.redAccent),
-                onPressed: _deleteSelectedMessages,
-                tooltip: 'حذف الرسائل المحددة',
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  setState(() {
-                    isSelectionMode = false;
-                    selectedMessageIds.clear();
-                  });
-                },
-              ),
-            ] else ...[
-              IconButton(
-                icon: const Icon(Icons.select_all, color: Color(0xFFE5C158)),
-                onPressed: () {
-                  setState(() {
-                    isSelectionMode = true;
-                    selectedMessageIds = messages.map((m) => m.id).toSet();
-                  });
-                },
-                tooltip: 'تحديد الكل لحذفهن',
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
-                onPressed: () {
-                  setState(() {
-                    globalChats[widget.userName]?.clear();
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم مسح كل رسائل المحادثة')));
-                },
-                tooltip: 'مسح محادثة الزبون',
-              ),
-            ]
-          ]
-        ],
       ),
       body: Column(
         children: [
@@ -2691,74 +2621,50 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                ChatMessage msg = messages[index];
-                bool isMe = widget.isAdmin ? msg.isAdmin : !msg.isAdmin;
-                bool isSelected = selectedMessageIds.contains(msg.id);
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chats')
+                  .doc(widget.userName)
+                  .collection('messages')
+                  .orderBy('timestamp', descending: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)));
+                }
 
-                return GestureDetector(
-                  onLongPress: widget.isAdmin
-                      ? () {
-                          setState(() {
-                            isSelectionMode = true;
-                            if (isSelected) {
-                              selectedMessageIds.remove(msg.id);
-                            } else {
-                              selectedMessageIds.add(msg.id);
-                            }
-                          });
-                        }
-                      : null,
-                  child: Align(
-                    alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.red.shade900
-                            : isMe
-                                ? const Color(0xFFE5C158)
-                                : const Color(0xFF1E1E24),
-                        borderRadius: BorderRadius.circular(14),
-                        border: isSelected ? Border.all(color: Colors.red, width: 2) : null,
+                var messages = snapshot.data!.docs;
+
+                if (messages.isEmpty) {
+                  return const Center(
+                    child: Text('لا توجد رسائل سحابية في هذه المحادثة بعد', style: TextStyle(color: Colors.white38)),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    var msgData = messages[index].data() as Map<String, dynamic>;
+                    bool isMsgAdmin = msgData['isAdmin'] ?? false;
+                    bool isMe = widget.isAdmin ? isMsgAdmin : !isMsgAdmin;
+
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isMe ? const Color(0xFFE5C158) : const Color(0xFF1E1E24),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          msgData['text'] ?? '',
+                          style: TextStyle(color: isMe ? Colors.black : Colors.white),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isSelectionMode)
-                            Checkbox(
-                              value: isSelected,
-                              onChanged: (val) {
-                                setState(() {
-                                  if (val == true) {
-                                    selectedMessageIds.add(msg.id);
-                                  } else {
-                                    selectedMessageIds.remove(msg.id);
-                                  }
-                                });
-                              },
-                            ),
-                          Flexible(
-                            child: Text(
-                              msg.text,
-                              style: TextStyle(color: isMe ? Colors.black : Colors.white),
-                            ),
-                          ),
-                          if (widget.isAdmin && msg.isAdmin) ...[
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () => _editMessage(msg),
-                              child: const Icon(Icons.edit, size: 16, color: Colors.black54),
-                            ),
-                          ]
-                        ],
-                      ),
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -2773,7 +2679,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     controller: _msgController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'اكتب رسالتك هنا...',
+                      hintText: 'اكتب رسالتك السحابية هنا...',
                       hintStyle: const TextStyle(color: Colors.white38),
                       filled: true,
                       fillColor: const Color(0xFF141418),
