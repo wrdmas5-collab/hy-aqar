@@ -15,21 +15,18 @@ void main() async {
 
   try {
     if (Firebase.apps.isEmpty) {
-      if (kIsWeb) {
-        await Firebase.initializeApp(
-          options: const FirebaseOptions(
-            apiKey: "AIzaSyCxMtCMtFHlbDMBWZpHRzqwF0YDz_P9Yzo",
-            authDomain: "hy-aqar.firebaseapp.com",
-            projectId: "hy-aqar",
-            storageBucket: "hy-aqar.firebasestorage.app",
-            messagingSenderId: "960269964659",
-            appId: "1:960269964659:web:10c758de7d84066f8fe106",
-            measurementId: "G-PC5B02LC48",
-          ),
-        );
-      } else {
-        await Firebase.initializeApp();
-      }
+      // تم توحيد إعدادات الفايربيز لتعمل على جميع المنصات (ويب، أندرويد، آيفون) لمنع انهيار الشاشة
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: "AIzaSyCxMtCMtFHlbDMBWZpHRzqwF0YDz_P9Yzo",
+          authDomain: "hy-aqar.firebaseapp.com",
+          projectId: "hy-aqar",
+          storageBucket: "hy-aqar.firebasestorage.app",
+          messagingSenderId: "960269964659",
+          appId: "1:960269964659:web:10c758de7d84066f8fe106",
+          measurementId: "G-PC5B02LC48",
+        ),
+      );
     }
   } catch (e) {
     debugPrint("Firebase initialization error: $e");
