@@ -1,0 +1,29 @@
+name: hy_academy_store
+description: "A new Flutter project for student supplies."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  url_launcher: ^6.3.1
+  supabase_flutter: ^2.8.0
+  cached_network_image: ^3.4.1
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.10.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  android: true
+  ios: true
+
+flutter:
+  uses-material-design: true
