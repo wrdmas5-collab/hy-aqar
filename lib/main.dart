@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,8 +13,27 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🔹 تهيئة فايربيس مباشرة بدون الحاجة لملف firebase_options.dart المفقود
-  await Firebase.initializeApp();
+  try {
+    if (Firebase.apps.isEmpty) {
+      if (kIsWeb) {
+        await Firebase.initializeApp(
+          options: const FirebaseOptions(
+            apiKey: "AIzaSyCxMtCMtFHlbDMBWZpHRzqwF0YDz_P9Yzo",
+            authDomain: "hy-aqar.firebaseapp.com",
+            projectId: "hy-aqar",
+            storageBucket: "hy-aqar.firebasestorage.app",
+            messagingSenderId: "960269964659",
+            appId: "1:960269964659:web:10c758de7d84066f8fe106",
+            measurementId: "G-PC5B02LC48",
+          ),
+        );
+      } else {
+        await Firebase.initializeApp();
+      }
+    }
+  } catch (e) {
+    debugPrint("Firebase initialization error: $e");
+  }
 
   final prefs = await SharedPreferences.getInstance();
   bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;

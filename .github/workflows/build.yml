@@ -1,17 +1,14 @@
-name: Build Flutter APK
+name: Build HY-Academy Store (Android & iOS)
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+      - master
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,14 +25,38 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install dependencies
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build Android APK
         run: flutter build apk --release
 
-      - name: Upload APK Artifact
+      - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: android-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build iOS Release
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload iOS Files Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-files
+          path: build/ios/iphoneos/
