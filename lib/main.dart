@@ -15,7 +15,6 @@ void main() async {
 
   try {
     if (Firebase.apps.isEmpty) {
-      // تم توحيد إعدادات الفايربيز لتعمل على جميع المنصات (ويب، أندرويد، آيفون) لمنع انهيار الشاشة
       await Firebase.initializeApp(
         options: const FirebaseOptions(
           apiKey: "AIzaSyCxMtCMtFHlbDMBWZpHRzqwF0YDz_P9Yzo",
@@ -712,14 +711,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               "- الجامعة: ${universityController.text.trim()}";
 
                           try {
-                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                            // التعديل الجذري: إنشاء وثيقة الطالب في مجموعة chats أولاً لضمان ظهورها عند الأدمن
+                            final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
+                            await chatRef.set({
+                              'lastActive': FieldValue.serverTimestamp(),
+                              'studentName': widget.userName,
+                            }, SetOptions(merge: true));
+
+                            await chatRef.collection('messages').add({
                               'senderName': widget.userName,
                               'text': orderMsg,
                               'isAdmin': false,
                               'timestamp': FieldValue.serverTimestamp(),
                             });
 
-                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                            await chatRef.collection('messages').add({
                               'senderName': 'الإدارة',
                               'text': 'مرحباً بك، تم تلقي طلب السلة بنجاح. يرجى الانتظار لحين تأكيده.',
                               'isAdmin': true,
@@ -988,14 +994,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               "- الجامعة: ${universityController.text.trim()}";
 
                           try {
-                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                            // التعديل الجذري: إنشاء وثيقة الطالب في مجموعة chats أولاً لضمان ظهورها عند الأدمن
+                            final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
+                            await chatRef.set({
+                              'lastActive': FieldValue.serverTimestamp(),
+                              'studentName': widget.userName,
+                            }, SetOptions(merge: true));
+
+                            await chatRef.collection('messages').add({
                               'senderName': widget.userName,
                               'text': orderMsg,
                               'isAdmin': false,
                               'timestamp': FieldValue.serverTimestamp(),
                             });
 
-                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                            await chatRef.collection('messages').add({
                               'senderName': 'الإدارة',
                               'text': 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
                               'isAdmin': true,
@@ -1813,14 +1826,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               "- الجامعة: ${universityController.text.trim()}";
 
                           try {
-                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                            final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
+                            await chatRef.set({
+                              'lastActive': FieldValue.serverTimestamp(),
+                              'studentName': widget.userName,
+                            }, SetOptions(merge: true));
+
+                            await chatRef.collection('messages').add({
                               'senderName': widget.userName,
                               'text': orderMsg,
                               'isAdmin': false,
                               'timestamp': FieldValue.serverTimestamp(),
                             });
 
-                            await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+                            await chatRef.collection('messages').add({
                               'senderName': 'الإدارة',
                               'text': 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
                               'isAdmin': true,
@@ -1984,7 +2003,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 }
 
-// ----------------- لوحة تحكم الأدمن -----------------
+// ----------------- لوحة تحكم الأدمن (المُحدثة والواسعة سحابياً) -----------------
 class AdminDashboard extends StatefulWidget {
   final String adminName;
   const AdminDashboard({super.key, required this.adminName});
@@ -2168,75 +2187,85 @@ class _AdminDashboardState extends State<AdminDashboard> {
         backgroundColor: const Color(0xFF141418),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton.icon(
-                onPressed: () => setState(() => _selectedTab = 0),
-                icon: const Icon(Icons.add_box, color: Color(0xFFE5C158)),
-                label: Text('إدارة المنتجات', style: TextStyle(color: _selectedTab == 0 ? Colors.white : const Color(0xFFE5C158))),
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() => _selectedTab = 1);
-                  _fetchTelegramGallery();
-                },
-                icon: const Icon(Icons.photo_library, color: Color(0xFFE5C158)),
-                label: Text('جاليري تيليجرام', style: TextStyle(color: _selectedTab == 1 ? Colors.white : const Color(0xFFE5C158))),
-              ),
-              TextButton.icon(
-                onPressed: () => setState(() => _selectedTab = 2),
-                icon: const Icon(Icons.category, color: Color(0xFFE5C158)),
-                label: Text('إدارة الأقسام', style: TextStyle(color: _selectedTab == 2 ? Colors.white : const Color(0xFFE5C158))),
-              ),
-              TextButton.icon(
-                onPressed: () => setState(() => _selectedTab = 3),
-                icon: const Icon(Icons.chat, color: Color(0xFFE5C158)),
-                label: Text('محادثات الطلاب', style: TextStyle(color: _selectedTab == 3 ? Colors.white : const Color(0xFFE5C158))),
-              ),
-            ],
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => setState(() => _selectedTab = 0),
+                  icon: const Icon(Icons.add_box, color: Color(0xFFE5C158)),
+                  label: Text('إدارة المنتجات', style: TextStyle(color: _selectedTab == 0 ? Colors.white : const Color(0xFFE5C158))),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() => _selectedTab = 1);
+                    _fetchTelegramGallery();
+                  },
+                  icon: const Icon(Icons.photo_library, color: Color(0xFFE5C158)),
+                  label: Text('جاليري تيليجرام', style: TextStyle(color: _selectedTab == 1 ? Colors.white : const Color(0xFFE5C158))),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => setState(() => _selectedTab = 2),
+                  icon: const Icon(Icons.category, color: Color(0xFFE5C158)),
+                  label: Text('إدارة الأقسام', style: TextStyle(color: _selectedTab == 2 ? Colors.white : const Color(0xFFE5C158))),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => setState(() => _selectedTab = 3),
+                  icon: const Icon(Icons.chat, color: Color(0xFFE5C158)),
+                  label: Text('محادثات الطلاب', style: TextStyle(color: _selectedTab == 3 ? Colors.white : const Color(0xFFE5C158))),
+                ),
+              ],
+            ),
           ),
         ),
       ),
       body: _selectedTab == 3
+          // ربط سحابي كامل لقائمة محادثات الطلاب والرسائل
           ? StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('chats').snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text('لا توجد محادثات طلاب سحابية حالياً', style: TextStyle(color: Colors.white38)),
+                  );
                 }
                 var studentDocs = snapshot.data!.docs;
 
                 return Row(
                   children: [
                     Container(
-                      width: 320,
+                      width: 280,
                       color: const Color(0xFF0F0F12),
-                      child: studentDocs.isEmpty
-                          ? const Center(child: Text('لا توجد محادثات طلاب سحابية حالياً', style: TextStyle(color: Colors.white38)))
-                          : ListView.builder(
-                              itemCount: studentDocs.length,
-                              itemBuilder: (context, index) {
-                                String student = studentDocs[index].id;
-                                return ListTile(
-                                  leading: const Icon(Icons.person, color: Color(0xFFE5C158)),
-                                  title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
-                                    onPressed: () => _deleteSingleChat(student),
-                                    tooltip: 'حذف محادثة هذا الزبون',
-                                  ),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => ChatScreen(userName: student, isAdmin: true),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
+                      child: ListView.builder(
+                        itemCount: studentDocs.length,
+                        itemBuilder: (context, index) {
+                          String student = studentDocs[index].id;
+                          return ListTile(
+                            leading: const Icon(Icons.person, color: Color(0xFFE5C158)),
+                            title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                              onPressed: () => _deleteSingleChat(student),
+                              tooltip: 'حذف محادثة هذا الزبون',
                             ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatScreen(userName: student, isAdmin: true),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
                     const Expanded(
                       child: Center(
@@ -2371,162 +2400,89 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ],
                       ),
                     )
-                  : Padding(
+                  : SingleChildScrollView(
                       padding: const EdgeInsets.all(24.0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            flex: 1,
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Text(
-                                    editingProductId == null ? 'إضافة منتج جديد' : 'تعديل بيانات المنتج',
-                                    style: const TextStyle(color: Color(0xFFE5C158), fontSize: 18, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 15),
-                                  TextField(
-                                    controller: _titleController,
-                                    decoration: const InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder()),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _priceController,
-                                    decoration: const InputDecoration(labelText: 'السعر (ل.س)', border: OutlineInputBorder()),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  DropdownButtonFormField<String>(
-                                    value: globalCategories.where((c) => c != 'الكل').contains(selectedProductCategory)
-                                        ? selectedProductCategory
-                                        : (globalCategories.where((c) => c != 'الكل').isNotEmpty
-                                            ? globalCategories.where((c) => c != 'الكل').first
-                                            : null),
-                                    decoration: const InputDecoration(labelText: 'القسم', border: OutlineInputBorder()),
-                                    items: globalCategories
-                                        .where((c) => c != 'الكل')
-                                        .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                                        .toList(),
-                                    onChanged: (val) {
-                                      setState(() {
-                                        selectedProductCategory = val!;
-                                      });
-                                    },
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _imageController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'رابط صورة تيليجرام',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: () {
-                                      setState(() => _selectedTab = 1);
-                                      _fetchTelegramGallery();
-                                    },
-                                    icon: const Icon(Icons.photo_library, color: Color(0xFFE5C158)),
-                                    label: const Text('اختيار من جاليري تيليجرام', style: TextStyle(color: Color(0xFFE5C158))),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _descController,
-                                    maxLines: 3,
-                                    decoration: const InputDecoration(labelText: 'تفاصيل المنتج ومواصفاته', border: OutlineInputBorder()),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  ElevatedButton(
-                                    onPressed: _saveProduct,
-                                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                                    child: Text(editingProductId == null ? 'نشر المنتج للسحابة' : 'حفظ التعديلات'),
-                                  ),
-                                  if (editingProductId != null) ...[
-                                    const SizedBox(height: 10),
-                                    OutlinedButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          editingProductId = null;
-                                          _titleController.clear();
-                                          _priceController.clear();
-                                          _descController.clear();
-                                          _imageController.clear();
-                                        });
-                                      },
-                                      child: const Text('إلغاء التعديل'),
-                                    ),
-                                  ]
-                                ],
-                              ),
+                          Text(
+                            editingProductId == null ? 'إضافة منتج جديد' : 'تعديل بيانات المنتج',
+                            style: const TextStyle(color: Color(0xFFE5C158), fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 20),
+                          TextField(
+                            controller: _titleController,
+                            decoration: const InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _priceController,
+                            decoration: const InputDecoration(labelText: 'السعر (ل.س)', border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            value: globalCategories.where((c) => c != 'الكل').contains(selectedProductCategory)
+                                ? selectedProductCategory
+                                : (globalCategories.where((c) => c != 'الكل').isNotEmpty
+                                    ? globalCategories.where((c) => c != 'الكل').first
+                                    : null),
+                            decoration: const InputDecoration(labelText: 'القسم', border: OutlineInputBorder()),
+                            items: globalCategories
+                                .where((c) => c != 'الكل')
+                                .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                                .toList(),
+                            onChanged: (val) {
+                              setState(() {
+                                selectedProductCategory = val!;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _imageController,
+                            decoration: const InputDecoration(
+                              labelText: 'رابط صورة تيليجرام',
+                              border: OutlineInputBorder(),
                             ),
                           ),
-                          const SizedBox(width: 24),
-                          Expanded(
-                            flex: 1,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('قائمة المنتجات الحالية بالسحابة', style: TextStyle(color: Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 10),
-                                Expanded(
-                                  child: StreamBuilder<QuerySnapshot>(
-                                    stream: FirebaseFirestore.instance.collection('products').snapshots(),
-                                    builder: (context, snapshot) {
-                                      if (!snapshot.hasData) {
-                                        return const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)));
-                                      }
-                                      var prods = snapshot.data!.docs.map((doc) {
-                                        var data = doc.data() as Map<String, dynamic>;
-                                        data['id'] = doc.id;
-                                        return data;
-                                      }).toList();
-
-                                      if (prods.isEmpty) {
-                                        return const Center(child: Text('لا توجد منتجات', style: TextStyle(color: Colors.white38)));
-                                      }
-
-                                      return ListView.builder(
-                                        itemCount: prods.length,
-                                        itemBuilder: (context, index) {
-                                          final p = prods[index];
-                                          return Card(
-                                            color: const Color(0xFF141418),
-                                            margin: const EdgeInsets.symmetric(vertical: 6),
-                                            child: ListTile(
-                                              leading: CachedNetworkImage(
-                                                imageUrl: p['image'] ?? '',
-                                                width: 45,
-                                                height: 45,
-                                                fit: BoxFit.cover,
-                                                errorWidget: (context, url, error) => const Icon(Icons.image),
-                                              ),
-                                              title: Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                              subtitle: Text('${p['category']} | ${p['price']}', style: const TextStyle(color: Color(0xFFE5C158), fontSize: 12)),
-                                              trailing: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  IconButton(
-                                                    icon: const Icon(Icons.edit, color: Colors.blueAccent, size: 20),
-                                                    onPressed: () => _editProduct(p),
-                                                  ),
-                                                  IconButton(
-                                                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
-                                                    onPressed: () => _deleteProduct(p['id']),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() => _selectedTab = 1);
+                              _fetchTelegramGallery();
+                            },
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                            icon: const Icon(Icons.photo_library, color: Color(0xFFE5C158)),
+                            label: const Text('اختيار من جاليري تيليجرام', style: TextStyle(color: Color(0xFFE5C158), fontSize: 15)),
                           ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _descController,
+                            maxLines: 4,
+                            decoration: const InputDecoration(labelText: 'تفاصيل المنتج ومواصفاته', border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: _saveProduct,
+                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                            child: Text(editingProductId == null ? 'نشر المنتج للسحابة' : 'حفظ التعديلات', style: const TextStyle(fontSize: 16)),
+                          ),
+                          if (editingProductId != null) ...[
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  editingProductId = null;
+                                  _titleController.clear();
+                                  _priceController.clear();
+                                  _descController.clear();
+                                  _imageController.clear();
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                              child: const Text('إلغاء التعديل'),
+                            ),
+                          ]
                         ],
                       ),
                     ),
@@ -2534,7 +2490,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
-// ----------------- شاشة المحادثة الخاصة والسحابية -----------------
+// ----------------- شاشة المحادثة الخاصة والسحابية بالكامل -----------------
 class ChatScreen extends StatefulWidget {
   final String userName;
   final bool isAdmin;
@@ -2551,7 +2507,13 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.trim().isEmpty) return;
 
     try {
-      await FirebaseFirestore.instance.collection('chats').doc(widget.userName).collection('messages').add({
+      final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
+      await chatRef.set({
+        'lastActive': FieldValue.serverTimestamp(),
+        'studentName': widget.userName,
+      }, SetOptions(merge: true));
+
+      await chatRef.collection('messages').add({
         'senderName': widget.isAdmin ? 'الإدارة (حيان)' : widget.userName,
         'text': text.trim(),
         'isAdmin': widget.isAdmin,
@@ -2626,17 +2588,17 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: false)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)));
                 }
 
-                var messages = snapshot.data!.docs;
-
-                if (messages.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Center(
                     child: Text('لا توجد رسائل سحابية في هذه المحادثة بعد', style: TextStyle(color: Colors.white38)),
                   );
                 }
+
+                var messages = snapshot.data!.docs;
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
