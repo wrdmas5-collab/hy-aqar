@@ -1,10 +1,11 @@
-name: Build HY-Academy Store (Android & iOS)
+name: Build HY STORE (Android & iOS)
 
 on:
   push:
     branches:
       - main
       - master
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -27,6 +28,9 @@ jobs:
 
       - name: Get Flutter dependencies
         run: flutter pub get
+
+      - name: Generate Launcher Icons
+        run: flutter pub run flutter_launcher_icons:main
 
       - name: Build Android APK
         run: flutter build apk --release
@@ -52,6 +56,9 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Generate Launcher Icons
+        run: flutter pub run flutter_launcher_icons:main
+
       - name: Build iOS Release
         run: flutter build ios --release --no-codesign
 
@@ -59,4 +66,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-release-files
-          path: build/ios/iphoneos/
+          path: build/ios/iphoneos/Runner.app

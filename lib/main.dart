@@ -11,6 +11,14 @@ import 'dart:math';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+// دالة استقبال الإشعارات في الخلفية (عندما يكون التطبيق مغلقاً أو الجهاز مقفلاً تماماً مثل واتساب)
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint("Handling a background message: ${message.messageId}");
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,8 +37,40 @@ void main() async {
         ),
       );
     }
+    
+    // تسجيل معالج الخلفية لإشعارات FCM
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    // طلب صلاحيات الإشعارات من المستخدم
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    debugPrint('User granted permission: ${settings.authorizationStatus}');
+
+    // الحصول على الـ Token الخاص بالجهاز للاختبار أو الإرسال الموجه
+    String? token = await messaging.getToken();
+    debugPrint("FCM Registration Token: $token");
+
+    // الاستماع للإشعارات والرسائل عندما يكون التطبيق مفتوحاً في الواجهة
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('Got a message whilst in the foreground!');
+      if (message.notification != null) {
+        debugPrint('Message also contained a notification: ${message.notification?.title}');
+        addAppNotification(
+          targetUserName: '', 
+          title: message.notification?.title ?? 'إشعار جديد',
+          message: message.notification?.body ?? '',
+          icon: Icons.notifications_active_rounded,
+          iconColor: const Color(0xFFE5A900),
+        );
+      }
+    });
+
   } catch (e) {
-    debugPrint("Firebase initialization error: $e");
+    debugPrint("Firebase initialization or FCM error: $e");
   }
 
   final prefs = await SharedPreferences.getInstance();
@@ -83,26 +123,26 @@ class _HyStoreAppState extends State<HyStoreApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: isDarkMode ? Brightness.dark : Brightness.light,
-        scaffoldBackgroundColor: isDarkMode ? const Color(0xFF121218) : const Color(0xFFF0F2F5),
-        primaryColor: const Color(0xFFFFB703),
+        scaffoldBackgroundColor: isDarkMode ? const Color(0xFF121218) : const Color(0xFFF8F6F0),
+        primaryColor: const Color(0xFFE5A900),
         fontFamily: 'Roboto',
         colorScheme: isDarkMode
             ? const ColorScheme.dark(
-                primary: Color(0xFFFFB703),
+                primary: Color(0xFFE5A900),
                 secondary: Color(0xFFFB8500),
                 surface: Color(0xFF1A1A24),
               )
             : const ColorScheme.light(
-                primary: Color(0xFFD49A00),
+                primary: Color(0xFFC68B00),
                 secondary: Color(0xFFFB8500),
-                surface: Colors.white,
+                surface: Color(0xFFFAF8F5),
               ),
         appBarTheme: AppBarTheme(
-          backgroundColor: isDarkMode ? const Color(0xFF161622) : Colors.white,
+          backgroundColor: isDarkMode ? const Color(0xFF161622) : const Color(0xFFF8F6F0),
           elevation: 0,
           centerTitle: true,
           titleTextStyle: const TextStyle(
-            color: Color(0xFFFFB703),
+            color: Color(0xFFE5A900),
             fontSize: 22,
             fontWeight: FontWeight.w900,
             letterSpacing: 1.5,
@@ -110,11 +150,11 @@ class _HyStoreAppState extends State<HyStoreApp> {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFFFB703),
+            backgroundColor: const Color(0xFFE5A900),
             foregroundColor: Colors.black,
             textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-            elevation: 12,
-            shadowColor: const Color(0x7FFFB703),
+            elevation: 8,
+            shadowColor: const Color(0x55E5A900),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -131,7 +171,7 @@ class _HyStoreAppState extends State<HyStoreApp> {
   }
 }
 
-// ----------------- ستيكرات وأنيميشن ثلاثي الأبعاد كثيفة تملأ الشاشة -----------------
+// ----------------- الصور العائمة 3D -----------------
 class FloatingSticker3D extends StatefulWidget {
   final String imageUrl;
   final IconData fallbackIcon;
@@ -151,7 +191,7 @@ class FloatingSticker3D extends StatefulWidget {
     this.left,
     this.right,
     required this.duration,
-    this.size = 60,
+    this.size = 65,
   });
 
   @override
@@ -178,9 +218,9 @@ class _FloatingSticker3DState extends State<FloatingSticker3D> with SingleTicker
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        double dy = sin(_controller.value * 2 * pi) * 18;
-        double dx = cos(_controller.value * 2 * pi) * 14;
-        double angle = sin(_controller.value * 2 * pi) * 0.15;
+        double dy = sin(_controller.value * 2 * pi) * 16;
+        double dx = cos(_controller.value * 2 * pi) * 12;
+        double angle = sin(_controller.value * 2 * pi) * 0.12;
 
         return Positioned(
           top: widget.top != null ? widget.top! + dy : null,
@@ -193,20 +233,18 @@ class _FloatingSticker3DState extends State<FloatingSticker3D> with SingleTicker
                 ..setEntry(3, 2, 0.001)
                 ..rotateX(angle)
                 ..rotateY(angle)
-                ..rotateZ(angle * 0.7),
+                ..rotateZ(angle * 0.5),
               alignment: Alignment.center,
               child: Container(
                 width: widget.size,
                 height: widget.size,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E2C).withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFFFB703).withOpacity(0.7), width: 2),
-                  boxShadow: const [
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x44FFB703),
-                      blurRadius: 20,
-                      spreadRadius: 2,
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
@@ -215,8 +253,8 @@ class _FloatingSticker3DState extends State<FloatingSticker3D> with SingleTicker
                   child: CachedNetworkImage(
                     imageUrl: widget.imageUrl,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFFFB703), size: 26)),
-                    errorWidget: (context, url, error) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFFFB703), size: 26)),
+                    placeholder: (context, url) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE5A900), size: 26)),
+                    errorWidget: (context, url, error) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE5A900), size: 26)),
                   ),
                 ),
               ),
@@ -228,7 +266,6 @@ class _FloatingSticker3DState extends State<FloatingSticker3D> with SingleTicker
   }
 }
 
-// مجموعة ضخمة من الستيكرات لتعبئة الشاشة بالكامل بدون إزعاج
 class BackgroundStickersLayer extends StatelessWidget {
   const BackgroundStickersLayer({super.key});
 
@@ -251,7 +288,7 @@ class BackgroundStickersLayer extends StatelessWidget {
   }
 }
 
-// ----------------- شاشة الترحيب الفخمة -----------------
+// ----------------- شاشة الترحيب -----------------
 class SplashScreen extends StatefulWidget {
   final bool isLoggedIn;
   final String initialName;
@@ -340,27 +377,35 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(30),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
-                          colors: [Color(0xFFFFB703), Color(0xFFFB8500)],
+                          colors: [Color(0xFFE5A900), Color(0xFFFB8500)],
                         ),
                         boxShadow: const [
                           BoxShadow(
-                            color: Color(0x7FFFB703),
+                            color: Color(0x44E5A900),
                             blurRadius: 45,
                             spreadRadius: 12,
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.storefront_rounded, size: 80, color: Colors.black),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/icon/icon.png',
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 80, color: Colors.black),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 30),
                     const Text(
                       'HY STORE',
                       style: TextStyle(
-                        color: Color(0xFFFFB703),
+                        color: Color(0xFFE5A900),
                         fontSize: 34,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 4,
@@ -385,7 +430,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       width: 35,
                       height: 35,
                       child: CircularProgressIndicator(
-                        color: Color(0xFFFFB703),
+                        color: Color(0xFFE5A900),
                         strokeWidth: 3,
                       ),
                     ),
@@ -400,7 +445,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 }
 
-// ----------------- شاشة تسجيل الدخول ببطاقة 3D تفاعلية -----------------
+// ----------------- شاشة تسجيل الدخول (مع الستكرات العائمة) -----------------
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -471,7 +516,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _openSupportWhatsApp() async {
     final Uri whatsappUri = Uri.parse(
-        "https://wa.me/+963967834966?text=${Uri.encodeComponent('لدي مشكلة ارغب من الادارة الاطلاع عليها ومساعدتي')}");
+        "https://wa.me/963967834966?text=${Uri.encodeComponent('لدي مشكلة ارغب من الادارة الاطلاع عليها ومساعدتي')}");
     if (await canLaunchUrl(whatsappUri)) {
       await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
     }
@@ -489,7 +534,7 @@ class _LoginScreenState extends State<LoginScreen> {
               gradient: RadialGradient(
                 center: const Alignment(0, -0.6),
                 radius: 1.5,
-                colors: isDark ? const [Color(0xFF2A2A38), Color(0xFF121218)] : const [Color(0xFFE2E8F0), Color(0xFFCBD5E1)],
+                colors: isDark ? const [Color(0xFF2A2A38), Color(0xFF121218)] : const [Color(0xFFF8F6F0), Color(0xFFE2E8F0)],
               ),
             ),
           ),
@@ -498,7 +543,7 @@ class _LoginScreenState extends State<LoginScreen> {
             top: 20,
             right: 20,
             child: IconButton(
-              icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFFFB703), size: 28),
+              icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE5A900), size: 28),
               onPressed: () => HyStoreApp.of(context).toggleTheme(),
               tooltip: 'تبديل المظهر (ليلي / صباحي)',
             ),
@@ -533,10 +578,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: BoxDecoration(
                             color: isDark ? const Color(0xFF1B1B26).withOpacity(0.95) : Colors.white.withOpacity(0.95),
                             borderRadius: BorderRadius.circular(35),
-                            border: Border.all(color: const Color(0xFFFFB703).withOpacity(0.7), width: 2),
+                            border: Border.all(color: const Color(0xFFE5A900).withOpacity(0.7), width: 2),
                             boxShadow: const [
                               BoxShadow(
-                                color: Color(0x55FFB703),
+                                color: Color(0x33E5A900),
                                 blurRadius: 60,
                                 offset: Offset(0, 20),
                               ),
@@ -547,25 +592,33 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Center(
                                 child: Container(
-                                  padding: const EdgeInsets.all(22),
+                                  padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     gradient: LinearGradient(
-                                      colors: [const Color(0xFFFFB703).withOpacity(0.3), const Color(0xFFFB8500).withOpacity(0.05)],
+                                      colors: [const Color(0xFFE5A900).withOpacity(0.3), const Color(0xFFFB8500).withOpacity(0.05)],
                                     ),
-                                    border: Border.all(color: const Color(0xFFFFB703), width: 2),
+                                    border: Border.all(color: const Color(0xFFE5A900), width: 2),
                                     boxShadow: const [
-                                      BoxShadow(color: Color(0x44FFB703), blurRadius: 25, spreadRadius: 6),
+                                      BoxShadow(color: Color(0x33E5A900), blurRadius: 25, spreadRadius: 6),
                                     ],
                                   ),
-                                  child: const Icon(Icons.storefront_rounded, size: 60, color: Color(0xFFFFB703)),
+                                  child: ClipOval(
+                                    child: Image.asset(
+                                      'assets/icon/icon.png',
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 60, color: Color(0xFFE5A900)),
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 24),
                               const Text(
                                 'HY STORE',
                                 style: TextStyle(
-                                  color: Color(0xFFFFB703),
+                                  color: Color(0xFFE5A900),
                                   fontSize: 30,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 4,
@@ -603,7 +656,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 isDark: isDark,
                               ),
                               const SizedBox(height: 10),
-                              // زر التواصل مع الدعم الفني بمربع أخضر وكتابة خضراء احترافية
                               SizedBox(
                                 width: double.infinity,
                                 height: 50,
@@ -631,11 +683,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(18),
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFFFFB703), Color(0xFFFB8500)],
+                                    colors: [Color(0xFFE5A900), Color(0xFFFB8500)],
                                   ),
                                   boxShadow: const [
                                     BoxShadow(
-                                      color: Color(0x66FFB703),
+                                      color: Color(0x44E5A900),
                                       blurRadius: 30,
                                       offset: Offset(0, 10),
                                     ),
@@ -688,23 +740,23 @@ class _LoginScreenState extends State<LoginScreen> {
         labelStyle: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
         helperText: helperText,
         helperStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: 11),
-        prefixIcon: Icon(icon, color: const Color(0xFFFFB703)),
+        prefixIcon: Icon(icon, color: const Color(0xFFE5A900)),
         filled: true,
-        fillColor: isDark ? const Color(0xFF262636) : const Color(0xFFE8ECEF),
+        fillColor: isDark ? const Color(0xFF262636) : const Color(0xFFF0EFEB),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: isDark ? const Color(0xFF36364D) : const Color(0xFFCBD5E1)),
+          borderSide: BorderSide(color: isDark ? const Color(0xFF36364D) : const Color(0xFFD4CDC3)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFFFB703), width: 2),
+          borderSide: const BorderSide(color: Color(0xFFE5A900), width: 2),
         ),
       ),
     );
   }
 }
 
-// النماذج والإشعارات المحلية
+// النماذج والإشعارات
 class NotificationItem {
   final String id;
   final String title;
@@ -733,6 +785,7 @@ class CartItem {
 
 Map<String, List<CartItem>> userCarts = {};
 Map<String, List<NotificationItem>> userNotifications = {};
+List<NotificationItem> adminNotifications = [];
 
 void addAppNotification({
   required String targetUserName,
@@ -756,9 +809,27 @@ void addAppNotification({
   );
 }
 
+void addAdminNotification({
+  required String customerName,
+  required String orderSummary,
+}) {
+  String timeStr = "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}";
+  adminNotifications.insert(
+    0,
+    NotificationItem(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: 'طلب جديد من الزبون: $customerName 📦',
+      message: orderSummary,
+      time: timeStr,
+      icon: Icons.shopping_bag_rounded,
+      iconColor: const Color(0xFFE5A900),
+    ),
+  );
+}
+
 List<String> globalCategories = ['الكل', 'عمارة', 'أسنان', 'مدنية', 'معلوماتية', 'بشرية', 'ديكور'];
 
-// ----------------- واجهة المتجر الرئيسية -----------------
+// ----------------- واجهة المتجر الرئيسية (مع الستكرات العائمة) -----------------
 class HomeScreen extends StatefulWidget {
   final String userName;
   final String userPhone;
@@ -788,7 +859,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openSupportWhatsApp() async {
     final Uri whatsappUri = Uri.parse(
-        "https://wa.me/+963967834966?text=${Uri.encodeComponent('لدي مشكلة ارغب من الادارة الاطلاع عليها ومساعدتي')}");
+        "https://wa.me/963967834966?text=${Uri.encodeComponent('لدي مشكلة ارغب من الادارة الاطلاع عليها ومساعدتي')}");
     if (await canLaunchUrl(whatsappUri)) {
       await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
     }
@@ -852,7 +923,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return AlertDialog(
               backgroundColor: const Color(0xFF1B1B26),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: const Text('تعديل المنتج (صلاحية الأدمن)', style: TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900)),
+              title: const Text('تعديل المنتج (صلاحية الأدمن)', style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -938,7 +1009,7 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(seconds: 2),
         action: SnackBarAction(
           label: 'عرض السلة',
-          textColor: const Color(0xFFFFB703),
+          textColor: const Color(0xFFE5A900),
           onPressed: _openCartSheet,
         ),
       ),
@@ -978,11 +1049,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: const [
-                          Icon(Icons.shopping_bag_rounded, color: Color(0xFFFFB703), size: 30),
+                          Icon(Icons.shopping_bag_rounded, color: Color(0xFFE5A900), size: 30),
                           SizedBox(width: 12),
                           Text(
                             'سلة المشتريات الذكية',
-                            style: TextStyle(color: Color(0xFFFFB703), fontSize: 20, fontWeight: FontWeight.w900),
+                            style: TextStyle(color: Color(0xFFE5A900), fontSize: 20, fontWeight: FontWeight.w900),
                           ),
                         ],
                       ),
@@ -1042,7 +1113,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           const SizedBox(height: 6),
                                           Text(
                                             item.product['price'] ?? '',
-                                            style: const TextStyle(color: Color(0xFFFFB703), fontSize: 13, fontWeight: FontWeight.w900),
+                                            style: const TextStyle(color: Color(0xFFE5A900), fontSize: 13, fontWeight: FontWeight.w900),
                                           ),
                                         ],
                                       ),
@@ -1064,7 +1135,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                         Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                                         IconButton(
-                                          icon: const Icon(Icons.add_circle_outline, color: Color(0xFFFFB703), size: 22),
+                                          icon: const Icon(Icons.add_circle_outline, color: Color(0xFFE5A900), size: 22),
                                           onPressed: () {
                                             setCartState(() {
                                               item.quantity++;
@@ -1090,7 +1161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const Text('المجموع الكلي:', style: TextStyle(fontSize: 16, color: Colors.white70)),
                           Text(
                             '$totalSum ل.س',
-                            style: const TextStyle(fontSize: 21, color: Color(0xFFFFB703), fontWeight: FontWeight.w900),
+                            style: const TextStyle(fontSize: 21, color: Color(0xFFE5A900), fontWeight: FontWeight.w900),
                           ),
                         ],
                       ),
@@ -1119,7 +1190,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _checkoutCart(List<CartItem> cart, int totalSum) async {
-    // تم جعل الحقل فارغاً بطلب منك تماماً
     final deliveryPhoneController = TextEditingController();
     final universityController = TextEditingController();
     String paymentMethod = 'نقدي عند الاستلام';
@@ -1132,7 +1202,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return AlertDialog(
               backgroundColor: const Color(0xFF1B1B26),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              title: const Text('تأكيد طلب السلة 🛒', style: TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900)),
+              title: const Text('تأكيد طلب السلة 🛒', style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1152,7 +1222,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (val) => setDialogState(() => paymentMethod = val!),
                     ),
                     const SizedBox(height: 16),
-                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFFB703))),
+                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: deliveryPhoneController,
@@ -1166,7 +1236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 16),
-                    const Text('الجامعة المراد الاستلام منها *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFFB703))),
+                    const Text('الجامعة المراد الاستلام منها *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: universityController,
@@ -1235,7 +1305,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: 'تم إرسال طلب السلة بنجاح 🛒',
                             message: 'تم إرسال طلب السلة المتضمن (${cart.length}) منتجات إلى الإدارة بنجاح.',
                             icon: Icons.shopping_cart_outlined,
-                            iconColor: const Color(0xFFFFB703),
+                            iconColor: const Color(0xFFE5A900),
+                          );
+
+                          addAdminNotification(
+                            customerName: widget.userName,
+                            orderSummary: 'طلب سلة (${cart.length} منتجات) بقيمة $totalSum ل.س',
                           );
 
                           setState(() {
@@ -1260,7 +1335,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openNotificationsSheet() {
-    List<NotificationItem> notifs = userNotifications[widget.userName] ?? [];
+    List<NotificationItem> notifs = widget.isAdmin ? adminNotifications : (userNotifications[widget.userName] ?? []);
 
     showModalBottomSheet(
       context: context,
@@ -1286,12 +1361,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
-                          Icon(Icons.notifications_active_rounded, color: Color(0xFFFFB703), size: 30),
-                          SizedBox(width: 12),
+                        children: [
+                          const Icon(Icons.notifications_active_rounded, color: Color(0xFFE5A900), size: 30),
+                          const SizedBox(width: 12),
                           Text(
-                            'الإشعارات والتحديثات',
-                            style: TextStyle(color: Color(0xFFFFB703), fontSize: 20, fontWeight: FontWeight.w900),
+                            widget.isAdmin ? 'إشعارات الطلبات (الأدمن)' : 'الإشعارات والتحديثات',
+                            style: const TextStyle(color: Color(0xFFE5A900), fontSize: 20, fontWeight: FontWeight.w900),
                           ),
                         ],
                       ),
@@ -1387,7 +1462,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showOrderDialog(Map<String, dynamic> product) {
     int quantity = 1;
     String paymentMethod = 'نقدي عند الاستلام';
-    // تم جعل الحقل فارغاً تماماً ليقوم المستخدم بكتابة الرقم من جديد بدون مسح
     final deliveryPhoneController = TextEditingController();
     final universityController = TextEditingController();
 
@@ -1399,7 +1473,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return AlertDialog(
               backgroundColor: const Color(0xFF1B1B26),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              title: Text('طلب: ${product['title']}', style: const TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900)),
+              title: Text('طلب: ${product['title']}', style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1412,7 +1486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Color(0xFFFFB703)),
+                          icon: const Icon(Icons.remove_circle, color: Color(0xFFE5A900)),
                           onPressed: () {
                             if (quantity > 1) {
                               setDialogState(() => quantity--);
@@ -1421,7 +1495,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                         IconButton(
-                          icon: const Icon(Icons.add_circle, color: Color(0xFFFFB703)),
+                          icon: const Icon(Icons.add_circle, color: Color(0xFFE5A900)),
                           onPressed: () {
                             setDialogState(() => quantity++);
                           },
@@ -1443,7 +1517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFFB703))),
+                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: deliveryPhoneController,
@@ -1457,7 +1531,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 16),
-                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFFB703))),
+                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: universityController,
@@ -1523,7 +1597,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: 'تم إرسال طلبك بنجاح 📦',
                             message: 'تم إرسال طلبك (${product['title']}) إلى الإدارة بنجاح.',
                             icon: Icons.shopping_bag_outlined,
-                            iconColor: const Color(0xFFFFB703),
+                            iconColor: const Color(0xFFE5A900),
+                          );
+
+                          addAdminNotification(
+                            customerName: widget.userName,
+                            orderSummary: 'طلب منتج: ${product['title']} (العدد: $quantity)',
                           );
 
                           Navigator.push(
@@ -1546,7 +1625,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     bool isDark = HyStoreApp.of(context).isDarkMode;
-    List<NotificationItem> notifs = userNotifications[widget.userName] ?? [];
+    List<NotificationItem> notifs = widget.isAdmin ? adminNotifications : (userNotifications[widget.userName] ?? []);
     int unreadCount = notifs.where((n) => !n.isRead).length;
     List<CartItem> cart = userCarts[widget.userName] ?? [];
     int cartCount = cart.fold(0, (sum, item) => sum + item.quantity);
@@ -1562,7 +1641,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const Text('HY STORE'),
                 actions: [
                   IconButton(
-                    icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFFFB703), size: 24),
+                    icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE5A900), size: 24),
                     onPressed: () => HyStoreApp.of(context).toggleTheme(),
                     tooltip: 'تبديل المظهر',
                   ),
@@ -1570,7 +1649,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     alignment: Alignment.center,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFFFFB703), size: 26),
+                        icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFFE5A900), size: 26),
                         onPressed: _openCartSheet,
                         tooltip: 'سلة المشتريات',
                       ),
@@ -1581,7 +1660,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: const BoxDecoration(
-                              color: Color(0xFFFFB703),
+                              color: Color(0xFFE5A900),
                               shape: BoxShape.circle,
                             ),
                             constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
@@ -1598,7 +1677,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     alignment: Alignment.center,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFFFB703), size: 26),
+                        icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE5A900), size: 26),
                         onPressed: _openNotificationsSheet,
                         tooltip: 'الإشعارات',
                       ),
@@ -1624,8 +1703,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (widget.isAdmin)
                     TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: const Color(0xFFFFB703)),
-                      icon: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFB703)),
+                      style: TextButton.styleFrom(foregroundColor: const Color(0xFFE5A900)),
+                      icon: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFE5A900)),
                       label: const Text('الأدمن', style: TextStyle(fontWeight: FontWeight.bold)),
                       onPressed: () {
                         Navigator.push(
@@ -1637,19 +1716,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFFFB703)),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFE5A900)),
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
+                          builder: (context) => ChatScreen(userName: widget.userName, isAdmin: widget.isAdmin),
                         ),
                       );
                     },
                     tooltip: 'محادثة الإدارة',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.support_agent_rounded, color: Color(0xFFFFB703)),
+                    icon: const Icon(Icons.support_agent_rounded, color: Color(0xFFE5A900)),
                     onPressed: _openSupportWhatsApp,
                     tooltip: 'الدعم الفني',
                   ),
@@ -1671,22 +1750,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomRight,
                       colors: [Color(0xFF2A2A38), Color(0xFF1B1B26)],
                     ),
-                    border: Border.all(color: const Color(0xFFFFB703).withOpacity(0.5), width: 1.8),
+                    border: Border.all(color: const Color(0xFFE5A900).withOpacity(0.5), width: 1.8),
                     boxShadow: const [
-                      BoxShadow(color: Color(0x33FFB703), blurRadius: 25, offset: Offset(0, 8)),
+                      BoxShadow(color: Color(0x22E5A900), blurRadius: 25, offset: Offset(0, 8)),
                     ],
                   ),
                   padding: const EdgeInsets.all(20),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFFFFB703).withOpacity(0.2),
-                          boxShadow: const [BoxShadow(color: Color(0x33FFB703), blurRadius: 10)],
+                          color: const Color(0xFFE5A900).withOpacity(0.2),
+                          boxShadow: const [BoxShadow(color: Color(0x22E5A900), blurRadius: 10)],
                         ),
-                        child: const Icon(Icons.storefront_rounded, size: 38, color: Color(0xFFFFB703)),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/icon/icon.png',
+                            width: 38,
+                            height: 38,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 38, color: Color(0xFFE5A900)),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -1696,7 +1783,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: const [
                             Text(
                               'أهلاً بك في منصة HY STORE',
-                              style: TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900, fontSize: 17),
+                              style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900, fontSize: 17),
                             ),
                             SizedBox(height: 6),
                             Text(
@@ -1720,7 +1807,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? 'ابحث عن أي منتج في المتجر الذكي...'
                         : 'ابحث في قسم $selectedCategory...',
                     hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black45),
-                    prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFFFB703)),
+                    prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE5A900)),
                     suffixIcon: searchQuery.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear_rounded, color: Colors.grey),
@@ -1736,11 +1823,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     fillColor: isDark ? const Color(0xFF1B1B26).withOpacity(0.9) : Colors.white.withOpacity(0.9),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide(color: isDark ? const Color(0xFF2E2E40) : const Color(0xFFCBD5E1)),
+                      borderSide: BorderSide(color: isDark ? const Color(0xFF2E2E40) : const Color(0xFFD4CDC3)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(18),
-                      borderSide: const BorderSide(color: Color(0xFFFFB703), width: 2),
+                      borderSide: const BorderSide(color: Color(0xFFE5A900), width: 2),
                     ),
                   ),
                   onChanged: (val) {
@@ -1769,12 +1856,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           cat == 'معلوماتية' ? Icons.computer_rounded :
                           cat == 'بشرية' ? Icons.local_hospital_rounded :
                           cat == 'ديكور' ? Icons.chair_rounded : Icons.star_rounded,
-                          color: isSelected ? Colors.black : const Color(0xFFFFB703),
+                          color: isSelected ? Colors.black : const Color(0xFFE5A900),
                           size: 22,
                         ),
                         label: Text(cat, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900)),
                         selected: isSelected,
-                        selectedColor: const Color(0xFFFFB703),
+                        selectedColor: const Color(0xFFE5A900),
                         labelStyle: TextStyle(
                           color: isSelected ? Colors.black : (isDark ? Colors.white : Colors.black87),
                           fontWeight: FontWeight.w900,
@@ -1801,7 +1888,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(color: Color(0xFFFFB703)),
+                            CircularProgressIndicator(color: Color(0xFFE5A900)),
                             SizedBox(height: 14),
                             Text('جاري تحميل المنتجات السحابية...', style: TextStyle(color: Colors.white54, fontSize: 13)),
                           ],
@@ -1816,7 +1903,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.inventory_2_outlined, size: 75, color: Color(0xFFFFB703)),
+                              const Icon(Icons.inventory_2_outlined, size: 75, color: Color(0xFFE5A900)),
                               const SizedBox(height: 16),
                               const Text(
                                 'لا توجد منتجات مضافة بعد في السحابة.',
@@ -1904,7 +1991,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(26),
                                 border: Border.all(color: const Color(0xFF2E2E40)),
                                 boxShadow: const [
-                                  BoxShadow(color: Color(0x33FFB703), blurRadius: 20, offset: Offset(0, 10)),
+                                  BoxShadow(color: Color(0x22E5A900), blurRadius: 20, offset: Offset(0, 10)),
                                 ],
                               ),
                               child: Column(
@@ -1920,7 +2007,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             fit: BoxFit.cover,
                                             width: double.infinity,
                                             placeholder: (context, url) => const Center(
-                                              child: CircularProgressIndicator(color: Color(0xFFFFB703)),
+                                              child: CircularProgressIndicator(color: Color(0xFFE5A900)),
                                             ),
                                             errorWidget: (context, url, error) => const Icon(Icons.error),
                                           ),
@@ -1933,11 +2020,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                             decoration: BoxDecoration(
                                               color: Colors.black.withOpacity(0.85),
                                               borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: const Color(0xFFFFB703).withOpacity(0.7)),
+                                              border: Border.all(color: const Color(0xFFE5A900).withOpacity(0.7)),
                                             ),
                                             child: Text(
                                               product['category'] ?? '',
-                                              style: const TextStyle(color: Color(0xFFFFB703), fontSize: 10, fontWeight: FontWeight.w900),
+                                              style: const TextStyle(color: Color(0xFFE5A900), fontSize: 10, fontWeight: FontWeight.w900),
                                             ),
                                           ),
                                         ),
@@ -1965,7 +2052,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                           ),
                                         ),
-                                        // زر الثلاث نقاط للأدمن حصراً
                                         if (widget.isAdmin)
                                           Positioned(
                                             top: 45,
@@ -1974,10 +2060,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                               decoration: BoxDecoration(
                                                 color: Colors.black.withOpacity(0.85),
                                                 shape: BoxShape.circle,
-                                                border: Border.all(color: const Color(0xFFFFB703)),
+                                                border: Border.all(color: const Color(0xFFE5A900)),
                                               ),
                                               child: PopupMenuButton<String>(
-                                                icon: const Icon(Icons.more_vert_rounded, color: Color(0xFFFFB703), size: 18),
+                                                icon: const Icon(Icons.more_vert_rounded, color: Color(0xFFE5A900), size: 18),
                                                 color: const Color(0xFF1B1B26),
                                                 onSelected: (val) {
                                                   if (val == 'edit') {
@@ -1989,7 +2075,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 itemBuilder: (context) => [
                                                   const PopupMenuItem(
                                                     value: 'edit',
-                                                    child: Text('تعديل المنتج', style: TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.bold)),
+                                                    child: Text('تعديل المنتج', style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.bold)),
                                                   ),
                                                   const PopupMenuItem(
                                                     value: 'delete',
@@ -2016,7 +2102,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         const SizedBox(height: 6),
                                         Text(
                                           product['price'] ?? '',
-                                          style: const TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900, fontSize: 15),
+                                          style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900, fontSize: 15),
                                         ),
                                         const SizedBox(height: 10),
                                         SizedBox(
@@ -2034,12 +2120,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: OutlinedButton.icon(
                                             onPressed: () => _addToCart(product),
                                             style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(color: Color(0xFFFFB703)),
+                                              side: const BorderSide(color: Color(0xFFE5A900)),
                                               padding: EdgeInsets.zero,
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                             ),
-                                            icon: const Icon(Icons.bookmark_add_outlined, size: 14, color: Color(0xFFFFB703)),
-                                            label: const Text('إضافة للسلة', style: TextStyle(fontSize: 10, color: Color(0xFFFFB703), fontWeight: FontWeight.bold)),
+                                            icon: const Icon(Icons.bookmark_add_outlined, size: 14, color: Color(0xFFE5A900)),
+                                            label: const Text('إضافة للسلة', style: TextStyle(fontSize: 10, color: Color(0xFFE5A900), fontWeight: FontWeight.bold)),
                                           ),
                                         ),
                                       ],
@@ -2066,15 +2152,19 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             UserAccountsDrawerHeader(
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: isDark ? [const Color(0xFF2A2A38), const Color(0xFF121218)] : [const Color(0xFFFFB703), const Color(0xFFFB8500)]),
+                gradient: LinearGradient(
+                  colors: isDark 
+                      ? const [Color(0xFF2A2A38), Color(0xFF121218)] 
+                      : const [Color(0xFFE5A900), Color(0xFFFB8500)],
+                ),
               ),
               currentAccountPicture: const CircleAvatar(
-                backgroundColor: Color(0xFFFFB703),
+                backgroundColor: Color(0xFFE5A900),
                 child: Icon(Icons.person_rounded, size: 40, color: Colors.black),
               ),
               accountName: Text(
                 widget.userName,
-                style: const TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900, fontSize: 17),
+                style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900, fontSize: 17),
               ),
               accountEmail: Text(
                 widget.userPhone,
@@ -2082,12 +2172,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.store_rounded, color: Color(0xFFFFB703)),
+              leading: const Icon(Icons.store_rounded, color: Color(0xFFE5A900)),
               title: const Text('المتجر الرئيسي'),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
-              leading: const Icon(Icons.shopping_cart_rounded, color: Color(0xFFFFB703)),
+              leading: const Icon(Icons.shopping_cart_rounded, color: Color(0xFFE5A900)),
               title: Text('سلة المشتريات ($cartCount)'),
               onTap: () {
                 Navigator.pop(context);
@@ -2112,7 +2202,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.notifications_none_rounded, color: Color(0xFFFFB703)),
+              leading: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE5A900)),
               title: const Text('الإشعارات والتحديثات'),
               onTap: () {
                 Navigator.pop(context);
@@ -2120,14 +2210,14 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFFFB703)),
+              leading: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFE5A900)),
               title: const Text('محادثتي مع الإدارة'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
+                    builder: (context) => ChatScreen(userName: widget.userName, isAdmin: widget.isAdmin),
                   ),
                 );
               },
@@ -2161,70 +2251,65 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('المنتجات المفضلة ❤️')),
-      body: Stack(
-        children: [
-          const BackgroundStickersLayer(),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('products').snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator(color: Color(0xFFFFB703)));
-              }
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('products').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)));
+          }
 
-              var favProducts = snapshot.data!.docs.map((doc) {
-                var data = doc.data() as Map<String, dynamic>;
-                data['id'] = doc.id;
-                return data;
-              }).where((p) => widget.favoriteIds.contains(p['id'])).toList();
+          var favProducts = snapshot.data!.docs.map((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            data['id'] = doc.id;
+            return data;
+          }).where((p) => widget.favoriteIds.contains(p['id'])).toList();
 
-              if (favProducts.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.favorite_border_rounded, size: 70, color: Colors.white24),
-                      SizedBox(height: 16),
-                      Text('لم تقم بإضافة أي منتجات للمفضلة بعد', style: TextStyle(color: Colors.white38, fontSize: 15)),
-                    ],
+          if (favProducts.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.favorite_border_rounded, size: 70, color: Colors.white24),
+                  SizedBox(height: 16),
+                  Text('لم تقم بإضافة أي منتجات للمفضلة بعد', style: TextStyle(color: Colors.white38, fontSize: 15)),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: favProducts.length,
+            itemBuilder: (context, index) {
+              final product = favProducts[index];
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B1B26),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF2E2E40)),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(12),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: CachedNetworkImage(imageUrl: product['image'] ?? '', width: 65, height: 65, fit: BoxFit.cover),
                   ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: favProducts.length,
-                itemBuilder: (context, index) {
-                  final product = favProducts[index];
-                  return Container(
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1B1B26),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF2E2E40)),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(12),
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: CachedNetworkImage(imageUrl: product['image'] ?? '', width: 65, height: 65, fit: BoxFit.cover),
-                      ),
-                      title: Text(product['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      subtitle: Text('${product['category']} | ${product['price']}', style: const TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.favorite_rounded, color: Colors.redAccent),
-                        onPressed: () {
-                          setState(() {
-                            widget.favoriteIds.remove(product['id']);
-                          });
-                        },
-                      ),
-                    ),
-                  );
-                },
+                  title: Text(product['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${product['category']} | ${product['price']}', style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.favorite_rounded, color: Colors.redAccent),
+                    onPressed: () {
+                      setState(() {
+                        widget.favoriteIds.remove(product['id']);
+                      });
+                    },
+                  ),
+                ),
               );
             },
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -2261,7 +2346,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               child: CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.contain,
-                placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Color(0xFFFFB703))),
+                placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900))),
               ),
             ),
             IconButton(
@@ -2302,7 +2387,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void _showOrderDialog() {
     int quantity = 1;
     String paymentMethod = 'نقدي عند الاستلام';
-    // حقل الهاتف فارغ تماماً مثل الطلب
     final deliveryPhoneController = TextEditingController();
     final universityController = TextEditingController();
 
@@ -2314,7 +2398,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             return AlertDialog(
               backgroundColor: const Color(0xFF1B1B26),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              title: Text('طلب: ${widget.product['title']}', style: const TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900)),
+              title: Text('طلب: ${widget.product['title']}', style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2327,14 +2411,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Color(0xFFFFB703)),
+                          icon: const Icon(Icons.remove_circle, color: Color(0xFFE5A900)),
                           onPressed: () {
                             if (quantity > 1) setDialogState(() => quantity--);
                           },
                         ),
                         Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                         IconButton(
-                          icon: const Icon(Icons.add_circle, color: Color(0xFFFFB703)),
+                          icon: const Icon(Icons.add_circle, color: Color(0xFFE5A900)),
                           onPressed: () => setDialogState(() => quantity++),
                         ),
                       ],
@@ -2352,7 +2436,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onChanged: (val) => setDialogState(() => paymentMethod = val!),
                     ),
                     const SizedBox(height: 16),
-                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFFB703))),
+                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: deliveryPhoneController,
@@ -2366,7 +2450,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 16),
-                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFFB703))),
+                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: universityController,
@@ -2431,7 +2515,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             title: 'تم إرسال طلبك بنجاح 📦',
                             message: 'تم إرسال طلبك (${widget.product['title']}) إلى الإدارة بنجاح.',
                             icon: Icons.shopping_bag_outlined,
-                            iconColor: const Color(0xFFFFB703),
+                            iconColor: const Color(0xFFE5A900),
+                          );
+
+                          addAdminNotification(
+                            customerName: widget.userName,
+                            orderSummary: 'طلب منتج: ${widget.product['title']} (العدد: $quantity)',
                           );
 
                           Navigator.push(
@@ -2459,128 +2548,123 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.product['title'] ?? '')),
-      body: Stack(
-        children: [
-          const BackgroundStickersLayer(),
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                GestureDetector(
-                  onTap: () => _openImageFullScreen(widget.product['image'] ?? ''),
-                  child: Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(26),
-                        child: CachedNetworkImage(
-                          imageUrl: widget.product['image'] ?? '',
-                          height: 320,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Color(0xFFFFB703))),
-                          errorWidget: (context, url, error) => const Icon(Icons.error),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 14,
-                        right: 14,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFFFB703)),
-                          ),
-                          child: Row(
-                            children: const [
-                              Icon(Icons.zoom_in_rounded, color: Color(0xFFFFB703), size: 20),
-                              SizedBox(width: 6),
-                              Text('معاينة مكبرة', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  widget.product['title'] ?? '',
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.product['price'] ?? '',
-                  style: const TextStyle(fontSize: 24, color: Color(0xFFFFB703), fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Chip(
-                    label: Text('القسم: ${widget.product['category']}'),
-                    backgroundColor: const Color(0xFF262636),
-                    labelStyle: const TextStyle(color: Color(0xFFFFB703), fontWeight: FontWeight.w900),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text('تفاصيل ومواصفات المنتج:', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFFFB703))),
-                const SizedBox(height: 8),
-                Text(
-                  widget.product['description'] ?? 'لا توجد تفاصيل إضافية.',
-                  style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
-                ),
-                const Divider(height: 40, color: Colors.white12),
-                const Text('تقييمات المستخدمين للمنتج', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFFFB703))),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.star_rounded, color: Colors.amber, size: 30),
-                    const SizedBox(width: 8),
-                    Text(
-                      avgRating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GestureDetector(
+              onTap: () => _openImageFullScreen(widget.product['image'] ?? ''),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(26),
+                    child: CachedNetworkImage(
+                      imageUrl: widget.product['image'] ?? '',
+                      height: 320,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900))),
+                      errorWidget: (context, url, error) => const Icon(Icons.error),
                     ),
-                    Text(' (${ratings.length} تقييمات)', style: const TextStyle(color: Colors.white38)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text('قيّم هذا المنتج:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Row(
-                  children: List.generate(5, (index) {
-                    int starVal = index + 1;
-                    return IconButton(
-                      icon: Icon(
-                        starVal <= myRating ? Icons.star_rounded : Icons.star_border_rounded,
-                        color: Colors.amber,
-                        size: 34,
-                      ),
-                      onPressed: () => _rateProduct(starVal),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 35),
-                ElevatedButton(
-                  onPressed: _showOrderDialog,
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                  child: const Text('طلب هذا المنتج الآن', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                ),
-                const SizedBox(height: 14),
-                OutlinedButton.icon(
-                  onPressed: widget.onAddToCart,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(color: Color(0xFFFFB703), width: 2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   ),
-                  icon: const Icon(Icons.bookmark_add_outlined, color: Color(0xFFFFB703)),
-                  label: const Text('إضافة إلى سلة المشتريات', style: TextStyle(color: Color(0xFFFFB703), fontSize: 16, fontWeight: FontWeight.bold)),
+                  Positioned(
+                    bottom: 14,
+                    right: 14,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5A900)),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.zoom_in_rounded, color: Color(0xFFE5A900), size: 20),
+                          SizedBox(width: 6),
+                          Text('معاينة مكبرة', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              widget.product['title'] ?? '',
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.product['price'] ?? '',
+              style: const TextStyle(fontSize: 24, color: Color(0xFFE5A900), fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Chip(
+                label: Text('القسم: ${widget.product['category']}'),
+                backgroundColor: const Color(0xFF262636),
+                labelStyle: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('تفاصيل ومواصفات المنتج:', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFE5A900))),
+            const SizedBox(height: 8),
+            Text(
+              widget.product['description'] ?? 'لا توجد تفاصيل إضافية.',
+              style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
+            ),
+            const Divider(height: 40, color: Colors.white12),
+            const Text('تقييمات المستخدمين للمنتج', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFE5A900))),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.star_rounded, color: Colors.amber, size: 30),
+                const SizedBox(width: 8),
+                Text(
+                  avgRating.toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
                 ),
+                Text(' (${ratings.length} تقييمات)', style: const TextStyle(color: Colors.white38)),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            const Text('قيّم هذا المنتج:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Row(
+              children: List.generate(5, (index) {
+                int starVal = index + 1;
+                return IconButton(
+                  icon: Icon(
+                    starVal <= myRating ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: Colors.amber,
+                    size: 34,
+                  ),
+                  onPressed: () => _rateProduct(starVal),
+                );
+              }),
+            ),
+            const SizedBox(height: 35),
+            ElevatedButton(
+              onPressed: _showOrderDialog,
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+              child: const Text('طلب هذا المنتج الآن', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: widget.onAddToCart,
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Color(0xFFE5A900), width: 2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              ),
+              icon: const Icon(Icons.bookmark_add_outlined, color: Color(0xFFE5A900)),
+              label: const Text('إضافة إلى سلة المشتريات', style: TextStyle(color: Color(0xFFE5A900), fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2741,8 +2825,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               children: [
                 TextButton.icon(
                   onPressed: () => setState(() => _selectedTab = 0),
-                  icon: const Icon(Icons.add_box_rounded, color: Color(0xFFFFB703)),
-                  label: Text('إدارة المنتجات', style: TextStyle(color: _selectedTab == 0 ? Colors.white : const Color(0xFFFFB703), fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.add_box_rounded, color: Color(0xFFE5A900)),
+                  label: Text('إدارة المنتجات', style: TextStyle(color: _selectedTab == 0 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 10),
                 TextButton.icon(
@@ -2750,299 +2834,294 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     setState(() => _selectedTab = 1);
                     _fetchTelegramGallery();
                   },
-                  icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFFFB703)),
-                  label: Text('جاليري تيليجرام', style: TextStyle(color: _selectedTab == 1 ? Colors.white : const Color(0xFFFFB703), fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE5A900)),
+                  label: Text('جاليري تيليجرام', style: TextStyle(color: _selectedTab == 1 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 10),
                 TextButton.icon(
                   onPressed: () => setState(() => _selectedTab = 2),
-                  icon: const Icon(Icons.category_rounded, color: Color(0xFFFFB703)),
-                  label: Text('إدارة الأقسام', style: TextStyle(color: _selectedTab == 2 ? Colors.white : const Color(0xFFFFB703), fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.category_rounded, color: Color(0xFFE5A900)),
+                  label: Text('إدارة الأقسام', style: TextStyle(color: _selectedTab == 2 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 10),
                 TextButton.icon(
                   onPressed: () => setState(() => _selectedTab = 3),
-                  icon: const Icon(Icons.chat_rounded, color: Color(0xFFFFB703)),
-                  label: Text('محادثات الطلاب', style: TextStyle(color: _selectedTab == 3 ? Colors.white : const Color(0xFFFFB703), fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.chat_rounded, color: Color(0xFFE5A900)),
+                  label: Text('محادثات الطلاب', style: TextStyle(color: _selectedTab == 3 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
           ),
         ),
       ),
-      body: Stack(
-        children: [
-          const BackgroundStickersLayer(),
-          _selectedTab == 3
-              ? StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('chats').snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator(color: Color(0xFFFFB703)));
-                    }
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Center(
-                        child: Text('لا توجد محادثات طلاب سحابية حالياً', style: TextStyle(color: Colors.white38)),
-                      );
-                    }
-                    var studentDocs = snapshot.data!.docs;
+      body: _selectedTab == 3
+          ? StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('chats').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text('لا توجد محادثات طلاب سحابية حالياً', style: TextStyle(color: Colors.white38)),
+                  );
+                }
+                var studentDocs = snapshot.data!.docs;
 
-                    return Row(
-                      children: [
-                        Container(
-                          width: 290,
-                          color: const Color(0xFF121218),
-                          child: ListView.builder(
-                            itemCount: studentDocs.length,
-                            itemBuilder: (context, index) {
-                              String student = studentDocs[index].id;
-                              return ListTile(
-                                leading: const Icon(Icons.person_rounded, color: Color(0xFFFFB703)),
-                                title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_rounded, color: Colors.redAccent, size: 20),
-                                  onPressed: () => _deleteSingleChat(student),
-                                  tooltip: 'حذف محادثة هذا الزبون',
+                return Row(
+                  children: [
+                    Container(
+                      width: 290,
+                      color: const Color(0xFF121218),
+                      child: ListView.builder(
+                        itemCount: studentDocs.length,
+                        itemBuilder: (context, index) {
+                          String student = studentDocs[index].id;
+                          return ListTile(
+                            leading: const Icon(Icons.person_rounded, color: Color(0xFFE5A900)),
+                            title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_rounded, color: Colors.redAccent, size: 20),
+                              onPressed: () => _deleteSingleChat(student),
+                              tooltip: 'حذف محادثة هذا الزبون',
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatScreen(userName: student, isAdmin: true),
                                 ),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ChatScreen(userName: student, isAdmin: true),
-                                    ),
-                                  );
-                                },
                               );
                             },
+                          );
+                        },
+                      ),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text('اختر طالباً من القائمة لمتابعة محادثته السحابية', style: TextStyle(color: Colors.white38)),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            )
+          : _selectedTab == 2
+              ? Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('إضافة قسم دراسي جديد', style: TextStyle(color: Color(0xFFE5A900), fontSize: 18, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _categoryController,
+                              decoration: InputDecoration(labelText: 'اسم القسم الجديد', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
+                            ),
                           ),
-                        ),
-                        const Expanded(
-                          child: Center(
-                            child: Text('اختر طالباً من القائمة لمتابعة محادثته السحابية', style: TextStyle(color: Colors.white38)),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            onPressed: () {
+                              String cat = _categoryController.text.trim();
+                              if (cat.isNotEmpty && !globalCategories.contains(cat)) {
+                                setState(() {
+                                  globalCategories.add(cat);
+                                  _categoryController.clear();
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تمت إضافة القسم ($cat) بنجاح')));
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16)),
+                            child: const Text('إضافة'),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 35),
+                      const Text('الأقسام الحالية (إدارة الحذف)', style: TextStyle(color: Color(0xFFE5A900), fontSize: 16, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: globalCategories.length,
+                          itemBuilder: (context, index) {
+                            String cat = globalCategories[index];
+                            if (cat == 'الكل') return const SizedBox.shrink();
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(color: const Color(0xFF1B1B26), borderRadius: BorderRadius.circular(16)),
+                              child: ListTile(
+                                title: Text(cat, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_rounded, color: Colors.redAccent),
+                                  onPressed: () => _deleteCategory(cat),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      ],
-                    );
-                  },
+                      ),
+                    ],
+                  ),
                 )
-              : _selectedTab == 2
+              : _selectedTab == 1
                   ? Padding(
                       padding: const EdgeInsets.all(24.0),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('إضافة قسم دراسي جديد', style: TextStyle(color: Color(0xFFFFB703), fontSize: 18, fontWeight: FontWeight.w900)),
-                          const SizedBox(height: 14),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _categoryController,
-                                  decoration: InputDecoration(labelText: 'اسم القسم الجديد', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                                ),
+                              const Text(
+                                'صور مجموعة تيليجرام (انقر لاختيارها كمنتج)',
+                                style: TextStyle(color: Color(0xFFE5A900), fontSize: 15, fontWeight: FontWeight.w900),
                               ),
-                              const SizedBox(width: 12),
-                              ElevatedButton(
-                                onPressed: () {
-                                  String cat = _categoryController.text.trim();
-                                  if (cat.isNotEmpty && !globalCategories.contains(cat)) {
-                                    setState(() {
-                                      globalCategories.add(cat);
-                                      _categoryController.clear();
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تمت إضافة القسم ($cat) بنجاح')));
-                                  }
-                                },
-                                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16)),
-                                child: const Text('إضافة'),
+                              ElevatedButton.icon(
+                                onPressed: _fetchTelegramGallery,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('تحديث'),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 35),
-                          const Text('الأقسام الحالية (إدارة الحذف)', style: TextStyle(color: Color(0xFFFFB703), fontSize: 16, fontWeight: FontWeight.w900)),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 16),
                           Expanded(
-                            child: ListView.builder(
-                              itemCount: globalCategories.length,
-                              itemBuilder: (context, index) {
-                                String cat = globalCategories[index];
-                                if (cat == 'الكل') return const SizedBox.shrink();
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 6),
-                                  decoration: BoxDecoration(color: const Color(0xFF1B1B26), borderRadius: BorderRadius.circular(16)),
-                                  child: ListTile(
-                                    title: Text(cat, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.delete_rounded, color: Colors.redAccent),
-                                      onPressed: () => _deleteCategory(cat),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                            child: isLoadingTelegramImages
+                                ? const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)))
+                                : telegramImages.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'لا توجد صور حديثة في مجموعة تيليجرام.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(color: Colors.white38),
+                                        ),
+                                      )
+                                    : GridView.builder(
+                                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                          maxCrossAxisExtent: 180,
+                                          childAspectRatio: 1.0,
+                                          crossAxisSpacing: 12,
+                                          mainAxisSpacing: 12,
+                                        ),
+                                        itemCount: telegramImages.length,
+                                        itemBuilder: (context, index) {
+                                          String imgUrl = telegramImages[index];
+                                          return GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _imageController.text = imgUrl;
+                                                _selectedTab = 0;
+                                              });
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('تم اختيار الصورة بنجاح!')),
+                                              );
+                                            },
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(color: const Color(0xFFE5A900), width: 2),
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius: BorderRadius.circular(14),
+                                                child: CachedNetworkImage(
+                                                  imageUrl: imgUrl,
+                                                  fit: BoxFit.cover,
+                                                  placeholder: (context, url) => const Center(
+                                                    child: CircularProgressIndicator(color: Color(0xFFE5A900)),
+                                                  ),
+                                                  errorWidget: (context, url, error) => const Icon(Icons.error),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
                           ),
                         ],
                       ),
                     )
-                  : _selectedTab == 1
-                      ? Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'صور مجموعة تيليجرام (انقر لاختيارها كمنتج)',
-                                    style: TextStyle(color: Color(0xFFFFB703), fontSize: 15, fontWeight: FontWeight.w900),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: _fetchTelegramGallery,
-                                    icon: const Icon(Icons.refresh_rounded),
-                                    label: const Text('تحديث'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Expanded(
-                                child: isLoadingTelegramImages
-                                    ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFB703)))
-                                    : telegramImages.isEmpty
-                                        ? const Center(
-                                            child: Text(
-                                              'لا توجد صور حديثة في مجموعة تيليجرام.',
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(color: Colors.white38),
-                                            ),
-                                          )
-                                        : GridView.builder(
-                                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                              maxCrossAxisExtent: 180,
-                                              childAspectRatio: 1.0,
-                                              crossAxisSpacing: 12,
-                                              mainAxisSpacing: 12,
-                                            ),
-                                            itemCount: telegramImages.length,
-                                            itemBuilder: (context, index) {
-                                              String imgUrl = telegramImages[index];
-                                              return GestureDetector(
-                                                onTap: () {
-                                                  setState(() {
-                                                    _imageController.text = imgUrl;
-                                                    _selectedTab = 0;
-                                                  });
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text('تم اختيار الصورة بنجاح!')),
-                                                  );
-                                                },
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    borderRadius: BorderRadius.circular(16),
-                                                    border: Border.all(color: const Color(0xFFFFB703), width: 2),
-                                                  ),
-                                                  child: ClipRRect(
-                                                    borderRadius: BorderRadius.circular(14),
-                                                    child: CachedNetworkImage(
-                                                      imageUrl: imgUrl,
-                                                      fit: BoxFit.cover,
-                                                      placeholder: (context, url) => const Center(
-                                                        child: CircularProgressIndicator(color: Color(0xFFFFB703)),
-                                                      ),
-                                                      errorWidget: (context, url, error) => const Icon(Icons.error),
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                              ),
-                            ],
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            editingProductId == null ? 'إضافة منتج جديد' : 'تعديل بيانات المنتج',
+                            style: const TextStyle(color: Color(0xFFE5A900), fontSize: 20, fontWeight: FontWeight.w900),
                           ),
-                        )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                editingProductId == null ? 'إضافة منتج جديد' : 'تعديل بيانات المنتج',
-                                style: const TextStyle(color: Color(0xFFFFB703), fontSize: 20, fontWeight: FontWeight.w900),
-                              ),
-                              const SizedBox(height: 22),
-                              TextField(
-                                controller: _titleController,
-                                decoration: InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _priceController,
-                                decoration: InputDecoration(labelText: 'السعر (ل.س)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                              ),
-                              const SizedBox(height: 16),
-                              DropdownButtonFormField<String>(
-                                value: globalCategories.where((c) => c != 'الكل').contains(selectedProductCategory)
-                                    ? selectedProductCategory
-                                    : (globalCategories.where((c) => c != 'الكل').isNotEmpty
-                                        ? globalCategories.where((c) => c != 'الكل').first
-                                        : null),
-                                decoration: InputDecoration(labelText: 'القسم', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                                items: globalCategories
-                                    .where((c) => c != 'الكل')
-                                    .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                                    .toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    selectedProductCategory = val!;
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _imageController,
-                                decoration: InputDecoration(
-                                  labelText: 'رابط صورة تيليجرام أو المنتج',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                                  filled: true,
-                                  fillColor: const Color(0xFF1B1B26),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                onPressed: () {
-                                  setState(() => _selectedTab = 1);
-                                  _fetchTelegramGallery();
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  side: const BorderSide(color: Color(0xFFFFB703)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                ),
-                                icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFFFB703)),
-                                label: const Text('اختيار من جاليري تيليجرام', style: TextStyle(color: Color(0xFFFFB703), fontSize: 15, fontWeight: FontWeight.bold)),
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _descController,
-                                maxLines: 4,
-                                decoration: InputDecoration(labelText: 'تفاصيل المنتج ومواصفاته', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                              ),
-                              const SizedBox(height: 28),
-                              ElevatedButton(
-                                onPressed: _saveProduct,
-                                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                                child: Text(editingProductId == null ? 'نشر المنتج للسحابة' : 'حفظ التعديلات', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                              ),
-                            ],
+                          const SizedBox(height: 22),
+                          TextField(
+                            controller: _titleController,
+                            decoration: InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
                           ),
-                        ),
-        ],
-      ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _priceController,
+                            decoration: InputDecoration(labelText: 'السعر (ل.س)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            value: globalCategories.where((c) => c != 'الكل').contains(selectedProductCategory)
+                                ? selectedProductCategory
+                                : (globalCategories.where((c) => c != 'الكل').isNotEmpty
+                                    ? globalCategories.where((c) => c != 'الكل').first
+                                    : null),
+                            decoration: InputDecoration(labelText: 'القسم', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
+                            items: globalCategories
+                                .where((c) => c != 'الكل')
+                                .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                                .toList(),
+                            onChanged: (val) {
+                              setState(() {
+                                selectedProductCategory = val!;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _imageController,
+                            decoration: InputDecoration(
+                              labelText: 'رابط صورة تيليجرام أو المنتج',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                              filled: true,
+                              fillColor: const Color(0xFF1B1B26),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() => _selectedTab = 1);
+                              _fetchTelegramGallery();
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5A900)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE5A900)),
+                            label: const Text('اختيار من جاليري تيليجرام', style: TextStyle(color: Color(0xFFE5A900), fontSize: 15, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _descController,
+                            maxLines: 4,
+                            decoration: InputDecoration(labelText: 'تفاصيل المنتج ومواصفاته', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
+                          ),
+                          const SizedBox(height: 28),
+                          ElevatedButton(
+                            onPressed: _saveProduct,
+                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+                            child: Text(editingProductId == null ? 'نشر المنتج للسحابة' : 'حفظ التعديلات', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                          ),
+                        ],
+                      ),
+                    ),
     );
   }
 }
 
-// ----------------- شاشة المحادثة الخاصة والسحابية -----------------
+// ----------------- شاشة المحادثة الخاصة وسحابة الإدارة -----------------
 class ChatScreen extends StatefulWidget {
   final String userName;
   final bool isAdmin;
@@ -3085,132 +3164,127 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Text(widget.isAdmin ? 'محادثة الزبون: ${widget.userName}' : 'محادثتي الخاصة مع الإدارة'),
         backgroundColor: const Color(0xFF161622),
       ),
-      body: Stack(
+      body: Column(
         children: [
-          const BackgroundStickersLayer(),
-          Column(
-            children: [
-              if (widget.isAdmin)
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  color: const Color(0xFF161622),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                          icon: const Icon(Icons.cancel_rounded, size: 18),
-                          label: const Text('تم رفض الطلب'),
-                          onPressed: () {
-                            _sendMessage('عذراً، تم رفض الطلب لعدم توفر المنتج حالياً.');
-                            addAppNotification(
-                              targetUserName: widget.userName,
-                              title: 'تحديث حالة الطلب ❌',
-                              message: 'عذراً، تعذر قبول طلبك الأخير.',
-                              icon: Icons.cancel_outlined,
-                              iconColor: Colors.redAccent,
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                          icon: const Icon(Icons.check_circle_rounded, size: 18),
-                          label: const Text('تأكيد الطلب (دليفري)'),
-                          onPressed: () {
-                            _sendMessage('تم تأكيد طلبك بنجاح ✅ وسيتم التواصل معك قريباً.');
-                            addAppNotification(
-                              targetUserName: widget.userName,
-                              title: 'تم تأكيد طلبك بنجاح ✅',
-                              message: 'سيقوم مندوب التوصيل بالتواصل معك قريباً للتسليم.',
-                              icon: Icons.local_shipping_outlined,
-                              iconColor: Colors.greenAccent,
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('chats')
-                      .doc(widget.userName)
-                      .collection('messages')
-                      .orderBy('timestamp', descending: false)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator(color: Color(0xFFFFB703)));
-                    }
-
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Center(
-                        child: Text('لا توجد رسائل سحابية في هذه المحادثة بعد', style: TextStyle(color: Colors.white38)),
-                      );
-                    }
-
-                    var messages = snapshot.data!.docs;
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        var msgData = messages[index].data() as Map<String, dynamic>;
-                        bool isMsgAdmin = msgData['isAdmin'] ?? false;
-                        bool isMe = widget.isAdmin ? isMsgAdmin : !isMsgAdmin;
-
-                        return Align(
-                          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: isMe ? const Color(0xFFFFB703) : const Color(0xFF262636),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              msgData['text'] ?? '',
-                              style: TextStyle(color: isMe ? Colors.black : Colors.white, fontWeight: isMe ? FontWeight.bold : FontWeight.normal),
-                            ),
-                          ),
+          if (widget.isAdmin)
+            Container(
+              padding: const EdgeInsets.all(10),
+              color: const Color(0xFF161622),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                      icon: const Icon(Icons.cancel_rounded, size: 18),
+                      label: const Text('تم رفض الطلب'),
+                      onPressed: () {
+                        _sendMessage('عذراً، تم رفض الطلب لعدم توفر المنتج حالياً.');
+                        addAppNotification(
+                          targetUserName: widget.userName,
+                          title: 'تحديث حالة الطلب ❌',
+                          message: 'عذراً، تعذر قبول طلبك الأخير.',
+                          icon: Icons.cancel_outlined,
+                          iconColor: Colors.redAccent,
                         );
                       },
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                      icon: const Icon(Icons.check_circle_rounded, size: 18),
+                      label: const Text('تأكيد الطلب (دليفري)'),
+                      onPressed: () {
+                        _sendMessage('تم تأكيد طلبك بنجاح ✅ وسيتم التواصل معك قريباً.');
+                        addAppNotification(
+                          targetUserName: widget.userName,
+                          title: 'تم تأكيد طلبك بنجاح ✅',
+                          message: 'سيقوم مندوب التوصيل بالتواصل معك قريباً للتسليم.',
+                          icon: Icons.local_shipping_outlined,
+                          iconColor: Colors.greenAccent,
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                color: const Color(0xFF121218),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _msgController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'اكتب رسالتك السحابية هنا...',
-                          hintStyle: const TextStyle(color: Colors.white38),
-                          filled: true,
-                          fillColor: const Color(0xFF1B1B26),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chats')
+                  .doc(widget.userName)
+                  .collection('messages')
+                  .orderBy('timestamp', descending: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text('لا توجد رسائل سحابية في هذه المحادثة بعد', style: TextStyle(color: Colors.white38)),
+                  );
+                }
+
+                var messages = snapshot.data!.docs;
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    var msgData = messages[index].data() as Map<String, dynamic>;
+                    bool isMsgAdmin = msgData['isAdmin'] ?? false;
+                    bool isMe = widget.isAdmin ? isMsgAdmin : !isMsgAdmin;
+
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isMe ? const Color(0xFFE5A900) : const Color(0xFF262636),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          msgData['text'] ?? '',
+                          style: TextStyle(color: isMe ? Colors.black : Colors.white, fontWeight: isMe ? FontWeight.bold : FontWeight.normal),
                         ),
                       ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: const Color(0xFF121218),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _msgController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'اكتب رسالتك السحابية هنا...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: const Color(0xFF1B1B26),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     ),
-                    const SizedBox(width: 10),
-                    IconButton(
-                      icon: const Icon(Icons.send_rounded, color: Color(0xFFFFB703), size: 26),
-                      onPressed: () => _sendMessage(_msgController.text),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 10),
+                IconButton(
+                  icon: const Icon(Icons.send_rounded, color: Color(0xFFE5A900), size: 26),
+                  onPressed: () => _sendMessage(_msgController.text),
+                ),
+              ],
+            ),
           ),
         ],
       ),
