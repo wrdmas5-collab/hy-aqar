@@ -4,11 +4,9 @@ import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http;
-import 'package:video_player/video_player.dart';
-import 'dart:convert';
 import 'dart:ui';
 import 'dart:math';
+import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,14 +14,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
-
-// تليجرام جاليري الصور والمتجر
-const String telegramBotToken = "8623101299:AAFK03es2d1eSXnoDbBF3NsPARLQxn7J68M";
-const String telegramChatId = "-1004436881244";
-
-// تليجرام مجموعة فيديوهات الكورسات الخاصة (السيرفر الآمن)
-const String telegramVideoBotToken = "9141718661:AAE8w0Ix1NObfds2ohS7B55FX4tmXJx3AL4";
-const String telegramVideoChatId = "-1004446951340";
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -187,6 +179,43 @@ class _HyAcademyAppState extends State<HyAcademyApp> {
   }
 }
 
+class SecureYouTubePlayer extends StatelessWidget {
+  final YoutubePlayerController controller;
+  final bool showControls;
+
+  const SecureYouTubePlayer({
+    super.key,
+    required this.controller,
+    this.showControls = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        YoutubePlayer(
+          controller: controller,
+          aspectRatio: 16 / 9,
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 55,
+          child: Container(color: Colors.transparent),
+        ),
+        Positioned(
+          bottom: 0,
+          right: 0,
+          width: 90,
+          height: 45,
+          child: Container(color: Colors.transparent),
+        ),
+      ],
+    );
+  }
+}
+
 class FloatingSticker3D extends StatefulWidget {
   final String imageUrl;
   final IconData fallbackIcon;
@@ -268,6 +297,8 @@ class _FloatingSticker3DState extends State<FloatingSticker3D> with SingleTicker
                   child: CachedNetworkImage(
                     imageUrl: widget.imageUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: 150,
+                    memCacheHeight: 150,
                     placeholder: (context, url) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE52521), size: 26)),
                     errorWidget: (context, url, error) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE52521), size: 26)),
                   ),
@@ -547,6 +578,7 @@ class _LoginScreenState extends State<LoginScreen> {
             .where('phone', isEqualTo: phone)
             .where('pass', isEqualTo: pass)
             .where('isActive', isEqualTo: true)
+            .limit(10)
             .get();
 
         if (query.docs.isNotEmpty) {
@@ -1057,40 +1089,57 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openNotificationsSheet() {
-    List notifs = (userNotifications[widget.userName] ?? []) as List;
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.65,
-          decoration: const BoxDecoration(color: Color(0xFF14141C), borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
-          padding: const EdgeInsets.all(26),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('الإشعارات والتحديثات 🔔', style: TextStyle(color: Color(0xFFE52521), fontSize: 20, fontWeight: FontWeight.w900)),
-              const Divider(color: Colors.white12, height: 30),
-              Expanded(
-                child: notifs.isEmpty
-                    ? const Center(child: Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white38)))
-                    : ListView.builder(
-                        itemCount: notifs.length,
-                        itemBuilder: (context, index) {
-                          final item = notifs[index];
-                          return ListTile(
-                            leading: Icon(item.icon, color: item.iconColor),
-                            title: Text(item.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            subtitle: Text(item.message, style: const TextStyle(color: Colors.white70)),
-                            trailing: Text(item.time, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                          );
-                        },
-                      ),
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('broadcast_notifications').orderBy('timestamp', descending: true).limit(50).snapshots(),
+          builder: (context, snapshot) {
+            List broadcastNotifs = snapshot.hasData ? snapshot.data!.docs : [];
+            List localNotifs = (userNotifications[widget.userName] ?? []) as List;
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.65,
+              decoration: const BoxDecoration(color: Color(0xFF14141C), borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
+              padding: const EdgeInsets.all(26),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('الإشعارات والتحديثات 🔔', style: TextStyle(color: Color(0xFFE52521), fontSize: 20, fontWeight: FontWeight.w900)),
+                  const Divider(color: Colors.white12, height: 30),
+                  Expanded(
+                    child: (broadcastNotifs.isEmpty && localNotifs.isEmpty)
+                        ? const Center(child: Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white38)))
+                        : ListView(
+                            children: [
+                              ...broadcastNotifs.map((doc) {
+                                var data = doc.data() as Map<String, dynamic>;
+                                Timestamp? ts = data['timestamp'] as Timestamp?;
+                                String timeStr = ts != null ? "${ts.toDate().hour}:${ts.toDate().minute.toString().padLeft(2, '0')}" : '';
+                                return ListTile(
+                                  leading: const Icon(Icons.campaign_rounded, color: Color(0xFFE52521)),
+                                  title: Text(data['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  subtitle: Text(data['message'] ?? '', style: const TextStyle(color: Colors.white70)),
+                                  trailing: Text(timeStr, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                );
+                              }),
+                              ...localNotifs.map((item) {
+                                return ListTile(
+                                  leading: Icon(item.icon, color: item.iconColor),
+                                  title: Text(item.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  subtitle: Text(item.message, style: const TextStyle(color: Colors.white70)),
+                                  trailing: Text(item.time, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                );
+                              }),
+                            ],
+                          ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1141,7 +1190,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               return ListTile(
                                 leading: ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: CachedNetworkImage(imageUrl: cartItem['image'] ?? '', width: 50, height: 50, fit: BoxFit.cover),
+                                  child: CachedNetworkImage(
+                                    imageUrl: cartItem['image'] ?? '', 
+                                    width: 50, 
+                                    height: 50, 
+                                    fit: BoxFit.cover,
+                                    memCacheWidth: 150,
+                                    memCacheHeight: 150,
+                                  ),
                                 ),
                                 title: Text(cartItem['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                 subtitle: Text('العدد: ${cartItem['qty']} | السعر: ${cartItem['price']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
@@ -1207,11 +1263,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     bool isDark = HyAcademyApp.of(context).isDarkMode;
-    List notifs = (userNotifications[widget.userName] ?? []) as List;
-    int unreadCount = notifs.where((n) => !n.isRead).length;
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1253,24 +1308,9 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE52521)),
             onPressed: () => HyAcademyApp.of(context).toggleTheme(),
           ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE52521)),
-                onPressed: _openNotificationsSheet,
-              ),
-              if (unreadCount > 0)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                    child: Text('$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE52521)),
+            onPressed: _openNotificationsSheet,
           ),
           if (widget.isAdmin)
             TextButton.icon(
@@ -1288,11 +1328,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-            onPressed: () => _logout(context),
-            tooltip: 'تسجيل خروج',
-          ),
         ],
       ),
       body: _currentNavIndex == 0
@@ -1344,81 +1379,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE52521).withOpacity(0.25),
-                        shape: BoxShape.circle,
-                        boxShadow: const [BoxShadow(color: Color(0x55E52521), blurRadius: 10)],
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/icon/icon.jpg',
-                          width: 38,
-                          height: 38,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.auto_awesome_rounded, color: Color(0xFFE52521), size: 26),
-                        ),
-                      ),
+                    const Text(
+                      'Welcome to hy Academy',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '✨ منصة hy Academy الاحترافية',
-                            style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'أهلاً بك، ${widget.userName}',
-                            style: TextStyle(
-                              color: isDark ? Colors.white : Colors.black87,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.5,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'كل ما يحتاجه الطالب الجامعي تجده هنا',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    const Icon(Icons.verified_rounded, color: Color(0xFFE52521), size: 24),
+                    const SizedBox(height: 8),
+                    Text(
+                      'أهلاً بك، ${widget.userName}',
+                      style: const TextStyle(
+                        color: Colors.amberAccent,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
-              ),
-            );
-          },
-        ),
-
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('ads').snapshots(),
-          builder: (context, adSnapshot) {
-            if (!adSnapshot.hasData || adSnapshot.data!.docs.isEmpty) return const SizedBox.shrink();
-            var adData = adSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-            String adUrl = adData['url'] ?? '';
-            bool isVideo = adData['isVideo'] ?? false;
-
-            if (adUrl.isEmpty) return const SizedBox.shrink();
-
-            return Container(
-              height: 220,
-              width: double.infinity,
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE52521), width: 1.5),
-                color: Colors.black,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: isVideo
-                    ? AdVideoOrReelPlayerWidget(videoUrl: adUrl)
-                    : CachedNetworkImage(imageUrl: adUrl, fit: BoxFit.cover, width: double.infinity),
               ),
             );
           },
@@ -1467,164 +1452,198 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: selectedCategory == 'العروض' 
-                ? FirebaseFirestore.instance.collection('bundles').snapshots() 
-                : FirebaseFirestore.instance.collection('products').snapshots(),
+                ? FirebaseFirestore.instance.collection('bundles').limit(100).snapshots() 
+                : FirebaseFirestore.instance.collection('products').limit(100).snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
-              var docs = snapshot.data!.docs;
-              if (docs.isEmpty) return const Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey)));
+              return StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('ads').doc('main_banner').snapshots(),
+                builder: (context, adSnapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+                  var docs = snapshot.data!.docs;
 
-              var items = docs.map((d) {
-                var data = d.data() as Map<String, dynamic>;
-                data['id'] = d.id;
-                return data;
-              }).where((p) {
-                bool matchCat = (selectedCategory == 'الكل' || selectedCategory == 'العروض' || p['category'] == selectedCategory);
-                bool matchQuery = (searchQuery.isEmpty || p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase()));
-                return matchCat && matchQuery;
-              }).toList();
+                  var items = docs.map((d) {
+                    var data = d.data() as Map<String, dynamic>;
+                    data['id'] = d.id;
+                    return data;
+                  }).where((p) {
+                    bool matchCat = (selectedCategory == 'الكل' || selectedCategory == 'العروض' || p['category'] == selectedCategory);
+                    bool matchQuery = (searchQuery.isEmpty || p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase()));
+                    return matchCat && matchQuery;
+                  }).toList();
 
-              return GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 0.78,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  var p = items[index];
-                  bool isFav = globalFavorites.contains(p['id']);
-                  String? discountBadge = p['discountBadge'];
+                  bool showAdInGrid = false;
+                  Map<String, dynamic>? adData;
+                  if (adSnapshot.hasData && adSnapshot.data!.exists) {
+                    adData = adSnapshot.data!.data() as Map<String, dynamic>?;
+                    if (adData != null && (adData['isActive'] ?? false) == true) {
+                      String adUrl = adData['url'] ?? '';
+                      if (adUrl.isNotEmpty) {
+                        showAdInGrid = true;
+                      }
+                    }
+                  }
 
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ProductDetailsScreen(
-                            product: p,
-                            userName: widget.userName,
-                            userPhone: widget.userPhone,
-                            userUid: widget.userUid,
-                            isAdmin: widget.isAdmin,
+                  int totalGridCount = items.length + (showAdInGrid ? 1 : 0);
+                  if (totalGridCount == 0) return const Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey)));
+
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.72,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: totalGridCount,
+                    itemBuilder: (context, index) {
+                      if (showAdInGrid && index == 0) {
+                        return _buildAdGridCard(adData!);
+                      }
+
+                      int itemIndex = showAdInGrid ? index - 1 : index;
+                      var p = items[itemIndex];
+                      bool isFav = globalFavorites.contains(p['id']);
+                      String? discountBadge = p['discountBadge'];
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProductDetailsScreen(
+                                product: p,
+                                userName: widget.userName,
+                                userPhone: widget.userPhone,
+                                userUid: widget.userUid,
+                                isAdmin: widget.isAdmin,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF181820) : Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFF2E2E3A)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                      child: CachedNetworkImage(
+                                        imageUrl: p['image'] ?? '', 
+                                        fit: BoxFit.cover, 
+                                        width: double.infinity,
+                                        memCacheWidth: 300,
+                                        memCacheHeight: 300,
+                                      ),
+                                    ),
+                                    if (discountBadge != null && discountBadge.isNotEmpty)
+                                      Positioned(
+                                        top: 6,
+                                        left: 6,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            discountBadge,
+                                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ),
+                                    Positioned(
+                                      top: 6,
+                                      right: 6,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            if (isFav) {
+                                              globalFavorites.remove(p['id']);
+                                            } else {
+                                              globalFavorites.add(p['id']);
+                                            }
+                                          });
+                                        },
+                                        child: CircleAvatar(
+                                          backgroundColor: Colors.black54,
+                                          radius: 14,
+                                          child: Icon(
+                                            isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                            color: Colors.redAccent,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1),
+                                    const SizedBox(height: 2),
+                                    Text(p['price'] ?? '', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 12)),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: SizedBox(
+                                            height: 32,
+                                            child: ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              ),
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => ProductDetailsScreen(product: p, userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin),
+                                                  ),
+                                                );
+                                              },
+                                              child: const Text('طلب', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          constraints: const BoxConstraints(),
+                                          padding: EdgeInsets.zero,
+                                          icon: const Icon(Icons.add_shopping_cart_rounded, color: Color(0xFFE52521), size: 20),
+                                          onPressed: () {
+                                            globalCart.add({
+                                              'title': p['title'],
+                                              'price': p['price'],
+                                              'priceNum': p['priceNum'] ?? 0,
+                                              'currency': p['currency'] ?? 'ل.س',
+                                              'image': p['image'],
+                                              'qty': 1,
+                                            });
+                                            setState(() {});
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج إلى سلة المشتريات 🛒')));
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
                     },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF181820) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF2E2E3A)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Stack(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                  child: CachedNetworkImage(imageUrl: p['image'] ?? '', fit: BoxFit.cover, width: double.infinity),
-                                ),
-                                if (discountBadge != null && discountBadge.isNotEmpty)
-                                  Positioned(
-                                    top: 6,
-                                    left: 6,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        discountBadge,
-                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ),
-                                Positioned(
-                                  top: 6,
-                                  right: 6,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        if (isFav) {
-                                          globalFavorites.remove(p['id']);
-                                        } else {
-                                          globalFavorites.add(p['id']);
-                                        }
-                                      });
-                                    },
-                                    child: CircleAvatar(
-                                      backgroundColor: Colors.black54,
-                                      radius: 14,
-                                      child: Icon(
-                                        isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                        color: Colors.redAccent,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), maxLines: 1),
-                                const SizedBox(height: 2),
-                                Text(p['price'] ?? '', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 10)),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: SizedBox(
-                                        height: 24,
-                                        child: ElevatedButton(
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => ProductDetailsScreen(product: p, userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin),
-                                              ),
-                                            );
-                                          },
-                                          child: const Text('طلب', style: TextStyle(fontSize: 9)),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      constraints: const BoxConstraints(),
-                                      padding: EdgeInsets.zero,
-                                      icon: const Icon(Icons.add_shopping_cart_rounded, color: Color(0xFFE52521), size: 18),
-                                      onPressed: () {
-                                        globalCart.add({
-                                          'title': p['title'],
-                                          'price': p['price'],
-                                          'priceNum': p['priceNum'] ?? 0,
-                                          'currency': p['currency'] ?? 'ل.س',
-                                          'image': p['image'],
-                                          'qty': 1,
-                                        });
-                                        setState(() {});
-                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج إلى سلة المشتريات 🛒')));
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   );
                 },
               );
@@ -1632,6 +1651,117 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAdGridCard(Map<String, dynamic> adData) {
+    String url = adData['url'] ?? '';
+    bool isVideo = adData['isVideo'] ?? false;
+    bool isInstagram = url.contains('instagram.com');
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AdFullScreenView(adData: adData),
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF181820),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE52521), width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: isInstagram
+                        ? Container(
+                            color: Colors.purple.shade900,
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.video_library_rounded, color: Colors.white, size: 40),
+                                SizedBox(height: 6),
+                                Text('إعلان إنستغرام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              ],
+                            ),
+                          )
+                        : (isVideo 
+                            ? ClipRect(
+                                child: OverflowBox(
+                                  maxWidth: double.infinity,
+                                  maxHeight: double.infinity,
+                                  child: FittedBox(
+                                    fit: BoxFit.cover,
+                                    child: SizedBox(
+                                      width: 400,
+                                      height: 225,
+                                      child: MiniAdYouTubePlayer(videoUrl: url),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)),
+                  ),
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE52521),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'إعلان مميز 📢',
+                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('إعلان برعاية المتجر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 28,
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isInstagram ? Colors.purple : const Color(0xFFE52521),
+                        padding: EdgeInsets.zero,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AdFullScreenView(adData: adData),
+                          ),
+                        );
+                      },
+                      child: Text(isInstagram ? 'زيارة انستغرام' : 'مشاهدة الإعلان', style: const TextStyle(fontSize: 11, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1672,16 +1802,96 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class AdVideoOrReelPlayerWidget extends StatefulWidget {
+class MiniAdYouTubePlayer extends StatefulWidget {
   final String videoUrl;
-  const AdVideoOrReelPlayerWidget({super.key, required this.videoUrl});
+  const MiniAdYouTubePlayer({super.key, required this.videoUrl});
 
   @override
-  State<AdVideoOrReelPlayerWidget> createState() => _AdVideoOrReelPlayerWidgetState();
+  State<MiniAdYouTubePlayer> createState() => _MiniAdYouTubePlayerState();
 }
 
-class _AdVideoOrReelPlayerWidgetState extends State<AdVideoOrReelPlayerWidget> {
-  late YoutubePlayerController _adController;
+class _MiniAdYouTubePlayerState extends State<MiniAdYouTubePlayer> {
+  late YoutubePlayerController _controller;
+  bool isPlaying = true;
+
+  String? extractAdId(String url) {
+    final regExp = RegExp(
+      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+      caseSensitive: false,
+      unicode: true,
+    );
+    final match = regExp.firstMatch(url);
+    return match?.group(1);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    String? vidId = extractAdId(widget.videoUrl);
+    _controller = YoutubePlayerController.fromVideoId(
+      videoId: vidId ?? 'dQw4w9WgXcQ',
+      autoPlay: true,
+      params: const YoutubePlayerParams(
+        showControls: false,
+        showFullscreenButton: false,
+        strictRelatedVideos: true,
+        loop: true,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.close();
+    super.dispose();
+  }
+
+  void _togglePlayPause() {
+    setState(() {
+      if (isPlaying) {
+        _controller.pauseVideo();
+        isPlaying = false;
+      } else {
+        _controller.playVideo();
+        isPlaying = true;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        SecureYouTubePlayer(controller: _controller, showControls: false),
+        Positioned(
+          bottom: 4,
+          left: 4,
+          child: CircleAvatar(
+            backgroundColor: Colors.black54,
+            radius: 16,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 18),
+              onPressed: _togglePlayPause,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class AdFullScreenView extends StatefulWidget {
+  final Map<String, dynamic> adData;
+  const AdFullScreenView({super.key, required this.adData});
+
+  @override
+  State<AdFullScreenView> createState() => _AdFullScreenViewState();
+}
+
+class _AdFullScreenViewState extends State<AdFullScreenView> {
+  late YoutubePlayerController _playerController;
   bool isInstagram = false;
 
   String? extractAdId(String url) {
@@ -1697,11 +1907,12 @@ class _AdVideoOrReelPlayerWidgetState extends State<AdVideoOrReelPlayerWidget> {
   @override
   void initState() {
     super.initState();
-    if (widget.videoUrl.contains('instagram.com')) {
+    String url = widget.adData['url'] ?? '';
+    if (url.contains('instagram.com')) {
       isInstagram = true;
     } else {
-      String? vidId = extractAdId(widget.videoUrl);
-      _adController = YoutubePlayerController.fromVideoId(
+      String? vidId = extractAdId(url);
+      _playerController = YoutubePlayerController.fromVideoId(
         videoId: vidId ?? 'dQw4w9WgXcQ',
         autoPlay: true,
         params: const YoutubePlayerParams(
@@ -1716,119 +1927,110 @@ class _AdVideoOrReelPlayerWidgetState extends State<AdVideoOrReelPlayerWidget> {
   @override
   void dispose() {
     if (!isInstagram) {
-      _adController.close();
+      _playerController.close();
     }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isInstagram) {
-      return Center(
+    String url = widget.adData['url'] ?? '';
+    bool isVideo = widget.adData['isVideo'] ?? false;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('عرض الإعلان 📢'),
+      ),
+      body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.video_library_rounded, color: Color(0xFFE52521), size: 40),
-              const SizedBox(height: 8),
-              const Text('إعلان إنستغرام (ريلز)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
-                icon: const Icon(Icons.open_in_new, color: Colors.white),
-                label: const Text('فتح الريلز على إنستغرام', style: TextStyle(color: Colors.white)),
-                onPressed: () async {
-                  final uri = Uri.parse(widget.videoUrl);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-              ),
-            ],
-          ),
+          child: isInstagram
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.video_library_rounded, color: Color(0xFFE52521), size: 70),
+                    const SizedBox(height: 16),
+                    const Text('إعلان إنستغرام (ريلز / صفحة)', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+                      icon: const Icon(Icons.open_in_new, color: Colors.white),
+                      label: const Text('زيارة صفحة انستغرام', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      onPressed: () async {
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                  ],
+                )
+              : (isVideo
+                  ? SecureYouTubePlayer(controller: _playerController)
+                  : CachedNetworkImage(imageUrl: url, fit: BoxFit.contain)),
         ),
-      );
-    }
-
-    return Stack(
-      children: [
-        YoutubePlayer(controller: _adController, aspectRatio: 16 / 9),
-        Positioned(
-          bottom: 8,
-          left: 8,
-          child: Row(
-            children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black54, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                icon: const Icon(Icons.replay, color: Colors.white, size: 16),
-                label: const Text('إعادة', style: TextStyle(color: Colors.white, fontSize: 10)),
-                onPressed: () {
-                  _adController.seekTo(seconds: 0);
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
-// ==============================================================================
-// 🎬 مشغل فيديو تليجرام الآمن المخصص
-// ==============================================================================
-class TelegramVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-  const TelegramVideoPlayer({super.key, required this.videoUrl});
+class CourseYouTubePlayerWidget extends StatefulWidget {
+  final String videoUrlOrId;
+  const CourseYouTubePlayerWidget({super.key, required this.videoUrlOrId});
 
   @override
-  State<TelegramVideoPlayer> createState() => _TelegramVideoPlayerState();
+  State<CourseYouTubePlayerWidget> createState() => _CourseYouTubePlayerWidgetState();
 }
 
-class _TelegramVideoPlayerState extends State<TelegramVideoPlayer> {
-  late VideoPlayerController _controller;
-  bool _isPlaying = false;
-  bool _isLoading = true;
-  String _currentQuality = 'HQ (عالية)';
+class _CourseYouTubePlayerWidgetState extends State<CourseYouTubePlayerWidget> {
+  late YoutubePlayerController _playerController;
+
+  String extractVideoId(String url) {
+    final regExp = RegExp(
+      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+      caseSensitive: false,
+      unicode: true,
+    );
+    final match = regExp.firstMatch(url);
+    return match?.group(1) ?? url;
+  }
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer(widget.videoUrl);
-  }
-
-  void _initializePlayer(String url) {
-    _controller = VideoPlayerController.networkUrl(Uri.parse(url))
-      ..initialize().then((_) {
-        setState(() {
-          _isLoading = false;
-        });
-        _controller.play();
-        setState(() => _isPlaying = true);
-      });
-    _controller.addListener(() {
-      if (mounted) {
-        setState(() {
-          _isPlaying = _controller.value.isPlaying;
-        });
-      }
-    });
+    String vidId = extractVideoId(widget.videoUrlOrId);
+    _playerController = YoutubePlayerController.fromVideoId(
+      videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
+      autoPlay: false,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+        strictRelatedVideos: true,
+      ),
+    );
   }
 
   @override
-  void didUpdateWidget(covariant TelegramVideoPlayer oldWidget) {
+  void didUpdateWidget(covariant CourseYouTubePlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.videoUrl != widget.videoUrl) {
-      _controller.dispose();
-      setState(() => _isLoading = true);
-      _initializePlayer(widget.videoUrl);
+    if (oldWidget.videoUrlOrId != widget.videoUrlOrId) {
+      _playerController.close();
+      String vidId = extractVideoId(widget.videoUrlOrId);
+      _playerController = YoutubePlayerController.fromVideoId(
+        videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
+        autoPlay: false,
+        params: const YoutubePlayerParams(
+          showControls: true,
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _playerController.close();
     super.dispose();
   }
 
@@ -1836,103 +2038,7 @@ class _TelegramVideoPlayerState extends State<TelegramVideoPlayer> {
   Widget build(BuildContext context) {
     return Container(
       color: Colors.black,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)))
-              : Center(
-                  child: AspectRatio(
-                    aspectRatio: _controller.value.aspectRatio > 0 ? _controller.value.aspectRatio : 16 / 9,
-                    child: VideoPlayer(_controller),
-                  ),
-                ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: Colors.black.withOpacity(0.75),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  VideoProgressIndicator(
-                    _controller,
-                    allowScrubbing: true,
-                    colors: VideoProgressColors(
-                      playedColor: const Color(0xFFE52521),
-                      bufferedColor: Colors.white30,
-                      backgroundColor: Colors.white10,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white),
-                            onPressed: () {
-                              setState(() {
-                                if (_controller.value.isPlaying) {
-                                  _controller.pause();
-                                } else {
-                                  _controller.play();
-                                }
-                              });
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.replay_10_rounded, color: Colors.white),
-                            onPressed: () {
-                              final newPos = _controller.value.position - const Duration(seconds: 10);
-                              _controller.seekTo(newPos < Duration.zero ? Duration.zero : newPos);
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.forward_10_rounded, color: Colors.white),
-                            onPressed: () {
-                              final newPos = _controller.value.position + const Duration(seconds: 10);
-                              _controller.seekTo(newPos > _controller.value.duration ? _controller.value.duration : newPos);
-                            },
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          DropdownButton<String>(
-                            value: _currentQuality,
-                            dropdownColor: const Color(0xFF14141C),
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                            underline: const SizedBox(),
-                            items: const [
-                              DropdownMenuItem(value: 'HQ (عالية)', child: Text('HQ (عالية)')),
-                              DropdownMenuItem(value: 'MQ (متوسطة)', child: Text('MQ (متوسطة)')),
-                              DropdownMenuItem(value: 'LQ (منخفضة)', child: Text('LQ (منخفضة)')),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _currentQuality = val);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('تم ضبط دقة البث إلى: $val')),
-                                );
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          const Text('hy Academy', style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w900)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: SecureYouTubePlayer(controller: _playerController),
     );
   }
 }
@@ -2040,85 +2146,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
-  void _editProductDialog() {
-    final titleController = TextEditingController(text: widget.product['title']);
-    final priceController = TextEditingController(text: widget.product['priceNum']?.toString() ?? '0');
-    final descController = TextEditingController(text: widget.product['description']);
-    final imageController = TextEditingController(text: widget.product['image']);
-    final discountController = TextEditingController(text: widget.product['discountBadge'] ?? '');
-    String currency = widget.product['currency'] ?? 'ل.س';
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF14141C),
-              title: const Text('تعديل المنتج / العرض ✏️', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(controller: titleController, decoration: const InputDecoration(labelText: 'اسم المنتج', filled: true)),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الرقمي', filled: true))),
-                        const SizedBox(width: 8),
-                        DropdownButton<String>(
-                          value: currency,
-                          dropdownColor: const Color(0xFF14141C),
-                          items: const [
-                            DropdownMenuItem(value: 'ل.س', child: Text('ل.س', style: TextStyle(color: Colors.white))),
-                            DropdownMenuItem(value: '\$', child: Text('\$', style: TextStyle(color: Colors.white))),
-                          ],
-                          onChanged: (val) => setDialogState(() => currency = val ?? 'ل.س'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(controller: discountController, decoration: const InputDecoration(labelText: 'نسبة الحسم (مثال: خصم 20% أو عروض خاصة)', filled: true)),
-                    const SizedBox(height: 10),
-                    TextField(controller: imageController, decoration: const InputDecoration(labelText: 'رابط الصورة', filled: true)),
-                    const SizedBox(height: 10),
-                    TextField(controller: descController, maxLines: 3, decoration: const InputDecoration(labelText: 'التفاصيل', filled: true)),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-                ElevatedButton(
-                  onPressed: () async {
-                    int priceNum = int.tryParse(priceController.text) ?? 0;
-                    String formattedPrice = "$priceNum $currency";
-                    String colName = widget.product['isBundle'] == true ? 'bundles' : 'products';
-
-                    await FirebaseFirestore.instance.collection(colName).doc(widget.product['id']).update({
-                      'title': titleController.text.trim(),
-                      'priceNum': priceNum,
-                      'currency': currency,
-                      'price': formattedPrice,
-                      'image': imageController.text.trim(),
-                      'description': descController.text.trim(),
-                      'discountBadge': discountController.text.trim(),
-                    });
-
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المنتج بنجاح وتحديثه سحابياً! ✅')));
-                  },
-                  child: const Text('حفظ التعديلات'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     bool isFav = globalFavorites.contains(widget.product['id']);
@@ -2127,18 +2154,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       appBar: AppBar(
         title: Text(widget.product['title'] ?? 'تفاصيل المنتج'),
         actions: [
-          if (widget.isAdmin) ...[
-            IconButton(
-              icon: const Icon(Icons.edit_rounded, color: Colors.amberAccent),
-              onPressed: _editProductDialog,
-              tooltip: 'تعديل المنتج',
-            ),
+          if (widget.isAdmin)
             IconButton(
               icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
               onPressed: _deleteProduct,
               tooltip: 'حذف المنتج',
             ),
-          ],
           IconButton(
             icon: Icon(isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: Colors.redAccent),
             onPressed: () {
@@ -2166,6 +2187,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   height: 250,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  memCacheWidth: 600,
+                  memCacheHeight: 600,
                 ),
               ),
             ),
@@ -2324,6 +2347,127 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
     );
   }
 
+  void _showActivationDialog(Map<String, dynamic> course) {
+    final codeController = TextEditingController();
+    String coursePriceStr = course['price'] ?? '${course['priceNum'] ?? 25000} ل.س';
+    String courseTitle = course['title'] ?? 'المقرر';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF14141C),
+          title: Text('تفعيل مادة: $courseTitle', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('السعر المطلوب: $coursePriceStr', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 12),
+                const Text('لشراء كود التفعيل الفوري، تواصل مع الإدارة عبر واتساب:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    icon: const Icon(Icons.chat, color: Colors.white),
+                    label: const Text('شراء كود عبر الواتساب', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      DocumentSnapshot settingsDoc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+                      String activeWhatsApp = "963967834966";
+                      if (settingsDoc.exists && settingsDoc.data() != null) {
+                        var data = settingsDoc.data() as Map<String, dynamic>;
+                        if (data['whatsapp'] != null && data['whatsapp'].toString().isNotEmpty) {
+                          activeWhatsApp = data['whatsapp'];
+                        }
+                      }
+                      String message = 'أرغب بشراء كورس ($courseTitle) بسعر $coursePriceStr، أريد كود التفعيل.';
+                      String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(message)}';
+                      if (await canLaunchUrl(Uri.parse(waUrl))) {
+                        await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 25),
+                const Text('أدخل كود التفعيل الذي استلمته من الإدارة:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: codeController,
+                  decoration: const InputDecoration(hintText: 'أدخل كود التفعيل...', filled: true),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                String enteredCode = codeController.text.trim();
+                var rawCodes = course['codes'] as List? ?? [];
+                var codesList = rawCodes.map((c) => Map<String, dynamic>.from(c as Map)).toList();
+                
+                bool isValid = false;
+                int matchedIndex = -1;
+                for (int i = 0; i < codesList.length; i++) {
+                  String dbCode = (codesList[i]['code'] ?? '').toString().trim();
+                  bool isUsed = codesList[i]['isUsed'] == true;
+                  bool isDisabled = codesList[i]['isDisabled'] == true;
+                  if (dbCode == enteredCode && !isUsed && !isDisabled) {
+                    isValid = true;
+                    matchedIndex = i;
+                    break;
+                  }
+                }
+
+                if (isValid || enteredCode == "123456") {
+                  try {
+                    if (matchedIndex != -1) {
+                      codesList[matchedIndex]['isUsed'] = true;
+                      codesList[matchedIndex]['usedBy'] = widget.userName;
+                      codesList[matchedIndex]['userUid'] = widget.userUid;
+                      codesList[matchedIndex]['usedAt'] = DateTime.now().toIso8601String();
+                    }
+
+                    await FirebaseFirestore.instance.collection('sales_log').add({
+                      'courseTitle': courseTitle,
+                      'university': course['university'] ?? 'عام',
+                      'college': course['college'] ?? 'عام',
+                      'price': coursePriceStr,
+                      'userName': widget.userName,
+                      'userUid': widget.userUid,
+                      'codeUsed': enteredCode,
+                      'purchasedAt': FieldValue.serverTimestamp(),
+                    });
+
+                    await FirebaseFirestore.instance.collection('courses').doc(course['id']).update({
+                      'codes': codesList,
+                      'unlockedUsers.${widget.userUid}': {
+                        'name': widget.userName,
+                        'activatedAt': FieldValue.serverTimestamp(),
+                      },
+                    });
+                  } catch (e) {
+                    debugPrint("Error updating course unlock: $e");
+                  }
+
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل المقرر بنجاح (صالح لمدة 4 أشهر)! 🎉')));
+                  setState(() {});
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كود التفعيل غير صحيح، مستخدم مسبقاً أو معطل')));
+                }
+              },
+              child: const Text('تفعيل المقرر'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (selectedUni == null) {
@@ -2362,7 +2506,12 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                         Expanded(
                           child: ClipRRect(
                             borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                            child: CachedNetworkImage(imageUrl: uniLogo, fit: BoxFit.cover),
+                            child: CachedNetworkImage(
+                              imageUrl: uniLogo, 
+                              fit: BoxFit.cover,
+                              memCacheWidth: 200,
+                              memCacheHeight: 200,
+                            ),
                           ),
                         ),
                         Padding(
@@ -2433,7 +2582,12 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                         Expanded(
                           child: ClipRRect(
                             borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                            child: CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover),
+                            child: CachedNetworkImage(
+                              imageUrl: imgUrl, 
+                              fit: BoxFit.cover,
+                              memCacheWidth: 200,
+                              memCacheHeight: 200,
+                            ),
                           ),
                         ),
                         Padding(
@@ -2475,18 +2629,20 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('courses').where('university', isEqualTo: selectedUni).snapshots(),
+            stream: FirebaseFirestore.instance.collection('courses').where('university', isEqualTo: selectedUni).limit(100).snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
               var docs = snapshot.data!.docs;
               
-              var courses = docs.map((d) {
+              Map<String, Map<String, dynamic>> uniqueCourses = {};
+              for (var d in docs) {
                 var data = d.data() as Map<String, dynamic>;
                 data['id'] = d.id;
-                return data;
-              }).where((c) {
-                return (c['college'] == null || c['college'] == selectedCollege);
-              }).toList();
+                if (data['college'] == null || data['college'] == selectedCollege) {
+                  uniqueCourses[d.id] = data;
+                }
+              }
+              var courses = uniqueCourses.values.toList();
 
               if (courses.isEmpty) {
                 return const Center(child: Text('لا توجد مقررات دراسية مضافة لهذه الكلية حالياً', style: TextStyle(color: Colors.grey)));
@@ -2495,7 +2651,7 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
               return GridView.builder(
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                  crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   childAspectRatio: 0.8,
@@ -2577,123 +2733,6 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
       ],
     );
   }
-
-  void _showActivationDialog(Map<String, dynamic> course) {
-    final codeController = TextEditingController();
-    String coursePriceStr = course['price'] ?? '${course['priceNum'] ?? 25000} ل.س';
-    String courseTitle = course['title'] ?? 'المقرر';
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF14141C),
-          title: Text('تفعيل مادة: $courseTitle', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('السعر المطلوب: $coursePriceStr', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 12),
-                const Text('لشراء كود التفعيل الفوري، تواصل مع الإدارة عبر واتساب:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                    icon: const Icon(Icons.chat, color: Colors.white),
-                    label: const Text('شراء كود عبر الواتساب', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    onPressed: () async {
-                      DocumentSnapshot settingsDoc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
-                      String activeWhatsApp = "963967834966";
-                      if (settingsDoc.exists && settingsDoc.data() != null) {
-                        var data = settingsDoc.data() as Map<String, dynamic>;
-                        if (data['whatsapp'] != null && data['whatsapp'].toString().isNotEmpty) {
-                          activeWhatsApp = data['whatsapp'];
-                        }
-                      }
-                      String message = 'أرغب بشراء كورس ($courseTitle) بسعر $coursePriceStr، أريد كود التفعيل.';
-                      String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(message)}';
-                      if (await canLaunchUrl(Uri.parse(waUrl))) {
-                        await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
-                      }
-                    },
-                  ),
-                ),
-                const Divider(color: Colors.white24, height: 25),
-                const Text('أدخل كود التفعيل الذي استلمته من الإدارة:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: codeController,
-                  decoration: const InputDecoration(hintText: 'أدخل كود التفعيل...', filled: true),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                String enteredCode = codeController.text.trim();
-                var codesList = course['codes'] ?? [];
-                
-                bool isValid = false;
-                int matchedIndex = -1;
-                for (int i = 0; i < codesList.length; i++) {
-                  if (codesList[i]['code'] == enteredCode && (codesList[i]['isUsed'] == false || codesList[i]['isUsed'] == null)) {
-                    isValid = true;
-                    matchedIndex = i;
-                    break;
-                  }
-                }
-
-                if (isValid || enteredCode == "123456") {
-                  try {
-                    if (matchedIndex != -1) {
-                      codesList[matchedIndex]['isUsed'] = true;
-                      codesList[matchedIndex]['usedBy'] = widget.userName;
-                      codesList[matchedIndex]['userUid'] = widget.userUid;
-                      codesList[matchedIndex]['usedAt'] = DateTime.now().toString();
-                    }
-
-                    await FirebaseFirestore.instance.collection('sales_log').add({
-                      'courseTitle': courseTitle,
-                      'university': course['university'] ?? 'عام',
-                      'college': course['college'] ?? 'عام',
-                      'price': coursePriceStr,
-                      'userName': widget.userName,
-                      'userUid': widget.userUid,
-                      'codeUsed': enteredCode,
-                      'purchasedAt': FieldValue.serverTimestamp(),
-                    });
-
-                    await FirebaseFirestore.instance.collection('courses').doc(course['id']).update({
-                      'codes': codesList,
-                      'unlockedUsers.${widget.userUid}': {
-                        'name': widget.userName,
-                        'activatedAt': FieldValue.serverTimestamp(),
-                      },
-                    });
-                  } catch (e) {
-                    debugPrint("Error updating course unlock: $e");
-                  }
-
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل المقرر بنجاح (صالح لمدة 4 أشهر)! 🎉')));
-                  setState(() {});
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كود التفعيل غير صحيح أو مستخدم مسبقاً')));
-                }
-              },
-              child: const Text('تفعيل المقرر'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class CoursePlayerScreen extends StatefulWidget {
@@ -2720,6 +2759,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   @override
   Widget build(BuildContext context) {
     var lectures = widget.course['lectures'] ?? [];
+    var coursePdfs = widget.course['pdfs'] as List<dynamic>? ?? [];
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.course['title'] ?? '')),
@@ -2729,7 +2769,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
             height: MediaQuery.of(context).size.height * 0.38,
             child: currentVideoUrl.isEmpty
                 ? const Center(child: Text('لا يوجد فيديو محدد للعرض', style: TextStyle(color: Colors.grey)))
-                : TelegramVideoPlayer(videoUrl: currentVideoUrl),
+                : CourseYouTubePlayerWidget(videoUrlOrId: currentVideoUrl),
           ),
           const SizedBox(height: 6),
           Padding(
@@ -2737,7 +2777,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('قائمة المحاضرات والدروس الآمنة:', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 15)),
+                const Text('قائمة المحاضرات والدروس الآمنة (يوتيوب غير مدرج):', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 13)),
                 if (widget.course['pdfUrl'] != null && widget.course['pdfUrl'].toString().isNotEmpty)
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
@@ -2766,7 +2806,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                   child: ListTile(
                     leading: CircleAvatar(backgroundColor: const Color(0xFFE52521), child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                     title: Text(lec['title'] ?? 'المحاضرة ${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('انقر لعرض الفيديو عبر السيرفر الآمن', style: TextStyle(color: Colors.grey, fontSize: 11)),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -2806,15 +2845,32 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
               },
             ),
           ),
+          if (coursePdfs.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              color: const Color(0xFF181820),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('قائمة بي دي اف المقرر والمحاضرات', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 6),
+                  ...coursePdfs.map((pdf) => ListTile(
+                    leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                    title: Text(pdf['name'] ?? 'ملف PDF للمقرر', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    onTap: () async {
+                      Uri uri = Uri.parse(pdf['url']);
+                      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    },
+                  )),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-// ==============================================================================
-// 🏛️ لوحة تحكم الأدمن الشاملة
-// ==============================================================================
 class AdminDashboard extends StatefulWidget {
   final String adminName;
   final List<String> adminPerms;
@@ -2832,7 +2888,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final _priceController = TextEditingController();
   String _productCurrency = 'ل.س';
   final _descController = TextEditingController();
-  final _imageController = TextEditingController();
+  String _productImageUrl = '';
+  bool _isUploadingProductImage = false;
   final _discountController = TextEditingController();
   String selectedCat = 'عمارة';
 
@@ -2840,12 +2897,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final _bundlePriceController = TextEditingController();
   String _bundleCurrency = 'ل.س';
   final _bundleDescController = TextEditingController();
-  final _bundleImageController = TextEditingController();
+  String _bundleImageUrl = '';
+  bool _isUploadingBundleImage = false;
   final _bundleDiscountController = TextEditingController();
   String selectedBundleCat = 'عمارة';
 
   final _adUrlController = TextEditingController();
   bool _isAdVideo = false;
+  bool _isAdActive = true;
 
   final _courseTitleController = TextEditingController();
   final _coursePriceController = TextEditingController();
@@ -2858,13 +2917,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
     {'title': TextEditingController(text: 'المحاضرة الأولى'), 'url': TextEditingController(), 'pdf': ''}
   ];
 
+  final TextEditingController _customCodeController = TextEditingController();
   final TextEditingController _salesSearchController = TextEditingController();
   String salesSearchQuery = '';
+  String salesDateFilter = 'الكل';
+  final Set<String> _selectedSalesIds = {};
+
   final TextEditingController _whatsappController = TextEditingController(text: '963967834966');
   final TextEditingController _notifTitleController = TextEditingController();
   final TextEditingController _notifBodyController = TextEditingController();
 
-  // فلتر الإحصاءات المتقدم
   String statsFilterUni = 'الكل';
   String statsFilterCollege = 'الكل';
 
@@ -2883,6 +2945,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     _loadSettings();
+    _loadActiveAdBanner();
     if (!widget.adminPerms.contains('all') && widget.adminPerms.isNotEmpty) {
       for (int i = 0; i < 10; i++) {
         if (_hasPermissionForTab(i)) {
@@ -2922,6 +2985,75 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  void _loadActiveAdBanner() async {
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('ads').doc('main_banner').get();
+    if (doc.exists && doc.data() != null) {
+      var data = doc.data() as Map<String, dynamic>;
+      if (data['url'] != null) {
+        setState(() {
+          _adUrlController.text = data['url'];
+          _isAdVideo = data['isVideo'] ?? false;
+          _isAdActive = data['isActive'] ?? true;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickAndUploadImage({required bool isBundle}) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      if (image == null) return;
+
+      setState(() {
+        if (isBundle) {
+          _isUploadingBundleImage = true;
+        } else {
+          _isUploadingProductImage = true;
+        }
+      });
+
+      String fileName = 'products/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      Reference ref = FirebaseStorage.instance.ref().child(fileName);
+
+      UploadTask uploadTask;
+      if (kIsWeb) {
+        Uint8List bytes = await image.readAsBytes();
+        uploadTask = ref.putData(bytes);
+      } else {
+        File file = File(image.path);
+        uploadTask = ref.putFile(file);
+      }
+
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      setState(() {
+        if (isBundle) {
+          _bundleImageUrl = downloadUrl;
+          _isUploadingBundleImage = false;
+        } else {
+          _productImageUrl = downloadUrl;
+          _isUploadingProductImage = false;
+        }
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم رفع الصورة بنجاح وتخزينها الدائم على فايربيز! ✅')),
+      );
+    } catch (e) {
+      setState(() {
+        _isUploadingBundleImage = false;
+        _isUploadingProductImage = false;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل رفع الصورة: $e')),
+      );
+    }
+  }
+
   void _saveWhatsAppSettings() async {
     await FirebaseFirestore.instance.collection('settings').doc('app_config').set({
       'whatsapp': _whatsappController.text.trim(),
@@ -2931,19 +3063,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   void _saveAdBanner() async {
     String url = _adUrlController.text.trim();
-    if (url.isEmpty) return;
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال رابط الإعلان')));
+      return;
+    }
     await FirebaseFirestore.instance.collection('ads').doc('main_banner').set({
       'url': url,
       'isVideo': _isAdVideo,
+      'isActive': _isAdActive,
     });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر وتحديث البانر الإعلاني بنجاح في واجهة المتجر الرئيسية! 🎬')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر وتحديث الإعلان في المتجر بنجاح! 📢')));
   }
 
   void _deleteAdBanner() async {
     await FirebaseFirestore.instance.collection('ads').doc('main_banner').delete();
     _adUrlController.clear();
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف البانر الإعلاني بنجاح')));
+    setState(() {
+      _isAdActive = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الإعلان نهائياً وعادت الأمور لطبيعتها')));
   }
 
   void _sendFcmBroadcast() async {
@@ -2955,20 +3093,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return;
     }
 
-    addAppNotification(
-      targetUserName: '',
-      title: title,
-      message: body,
-      icon: Icons.campaign_rounded,
-      iconColor: const Color(0xFFE52521),
-    );
+    await FirebaseFirestore.instance.collection('broadcast_notifications').add({
+      'title': title,
+      'message': body,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
 
     _notifTitleController.clear();
     _notifBodyController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار الاحترافي بنجاح لجميع الطلاب حتى لو كان التطبيق مغلقاً! 🚀')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار العام بنجاح لجميع المستخدمين! 🚀')));
   }
 
-  // طريقة إدخال رابط الـ PDF (متوافقة مع أندرويد APK والويب تماماً)
   void _inputPdfUrlDialog(Function(String) onUploaded) {
     final pdfController = TextEditingController();
     showDialog(
@@ -2980,7 +3115,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           content: TextField(
             controller: pdfController,
             decoration: const InputDecoration(
-              labelText: 'رابط ملف PDF (Google Drive, Telegram, etc.)',
+              labelText: 'رابط ملف PDF على فايربيز (Firebase Storage)',
               filled: true,
             ),
           ),
@@ -3004,194 +3139,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  void _openTelegramGallery(TextEditingController targetController) async {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF14141C),
-          title: const Text('معرض صور تليغرام 🖼️', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-          content: SizedBox(
-            width: 400,
-            height: 350,
-            child: FutureBuilder(
-              future: http.get(Uri.parse('https://api.telegram.org/bot$telegramBotToken/getUpdates')),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
-                }
-                if (!snapshot.hasData || (snapshot.data as http.Response).statusCode != 200) {
-                  return const Center(child: Text('تعذر جلب الصور من تليغرام حالياً', style: TextStyle(color: Colors.grey)));
-                }
-
-                try {
-                  var data = jsonDecode((snapshot.data as http.Response).body);
-                  var results = data['result'] ?? [];
-                  var photoUrls = [];
-
-                  for (var update in results) {
-                    var message = update['message'] ?? update['channel_post'];
-                    if (message != null && message['photo'] != null) {
-                      var photos = message['photo'];
-                      var bestPhoto = photos.last;
-                      String fileId = bestPhoto['file_id'];
-                      photoUrls.add(fileId);
-                    }
-                  }
-
-                  if (photoUrls.isEmpty) {
-                    return const Center(child: Text('لا توجد صور حديثة في القناة.', style: TextStyle(color: Colors.white70)));
-                  }
-
-                  return FutureBuilder(
-                    future: Future.wait(photoUrls.map((fileId) async {
-                      var res = await http.get(Uri.parse('https://api.telegram.org/bot$telegramBotToken/getFile?file_id=$fileId'));
-                      if (res.statusCode == 200) {
-                        var fileData = jsonDecode(res.body);
-                        String filePath = fileData['result']['file_path'];
-                        return 'https://api.telegram.org/file/bot$telegramBotToken/$filePath';
-                      }
-                      return '';
-                    })),
-                    builder: (context, urlSnapshot) {
-                      if (!urlSnapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
-                      var validUrls = (urlSnapshot.data as List).where((u) => u.isNotEmpty).toList();
-
-                      return GridView.builder(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
-                        itemCount: validUrls.length,
-                        itemBuilder: (context, index) {
-                          String imgUrl = validUrls[index];
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                targetController.text = imgUrl;
-                              });
-                              Navigator.pop(context);
-                            },
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                } catch (e) {
-                  return Center(child: Text('خطأ: $e', style: const TextStyle(color: Colors.red)));
-                }
-              },
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
-          ],
-        );
-      },
-    );
-  }
-
-  void _openTelegramVideoGallery(TextEditingController targetController) async {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF14141C),
-          title: const Text('معرض فيديوهات تليغرام الآمن 🎥', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-          content: SizedBox(
-            width: 450,
-            height: 380,
-            child: FutureBuilder(
-              future: http.get(Uri.parse('https://api.telegram.org/bot$telegramVideoBotToken/getUpdates')),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
-                }
-                if (!snapshot.hasData || (snapshot.data as http.Response).statusCode != 200) {
-                  return const Center(child: Text('تعذر جلب الفيديوهات من مجموعة تليجرام الخاصة', style: TextStyle(color: Colors.grey)));
-                }
-
-                try {
-                  var data = jsonDecode((snapshot.data as http.Response).body);
-                  var results = data['result'] ?? [];
-                  var videoFileIds = [];
-
-                  for (var update in results) {
-                    var message = update['message'] ?? update['channel_post'];
-                    if (message != null && (message['video'] != null || message['document'] != null)) {
-                      var vid = message['video'] ?? message['document'];
-                      String fileId = vid['file_id'];
-                      videoFileIds.add(fileId);
-                    }
-                  }
-
-                  if (videoFileIds.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'لا توجد فيديوهات مرسلة في مجموعة تليجرام الخاصة حالياً.\nأرسل فيديو للمجموعة لكي يظهر هنا!',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                        textAlign: TextAlign.center,
-                      ),
-                    );
-                  }
-
-                  return FutureBuilder(
-                    future: Future.wait(videoFileIds.map((fileId) async {
-                      var res = await http.get(Uri.parse('https://api.telegram.org/bot$telegramVideoBotToken/getFile?file_id=$fileId'));
-                      if (res.statusCode == 200) {
-                        var fileData = jsonDecode(res.body);
-                        String filePath = fileData['result']['file_path'];
-                        return 'https://api.telegram.org/file/bot$telegramVideoBotToken/$filePath';
-                      }
-                      return '';
-                    })),
-                    builder: (context, urlSnapshot) {
-                      if (!urlSnapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
-                      var validUrls = (urlSnapshot.data as List).where((u) => u.isNotEmpty).toList();
-
-                      return ListView.builder(
-                        itemCount: validUrls.length,
-                        itemBuilder: (context, index) {
-                          String vidUrl = validUrls[index];
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            decoration: BoxDecoration(color: const Color(0xFF1E1E28), borderRadius: BorderRadius.circular(12)),
-                            child: ListTile(
-                              leading: const Icon(Icons.video_library_rounded, color: Color(0xFFE52521)),
-                              title: Text('فيديو تليجرام آمن #${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                              subtitle: Text(vidUrl, style: const TextStyle(color: Colors.grey, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                              trailing: ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521), padding: const EdgeInsets.symmetric(horizontal: 12)),
-                                onPressed: () {
-                                  setState(() {
-                                    targetController.text = vidUrl;
-                                  });
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم اختيار فيديو السيرفر الآمن بنجاح! ✅')));
-                                },
-                                child: const Text('اختيار', style: TextStyle(fontSize: 12)),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                } catch (e) {
-                  return Center(child: Text('خطأ: $e', style: const TextStyle(color: Colors.red)));
-                }
-              },
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
-          ],
-        );
-      },
-    );
-  }
-
   void _saveProduct() async {
     if (_titleController.text.isEmpty || _priceController.text.isEmpty) return;
     int priceNum = int.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -3204,7 +3151,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       'currency': _productCurrency,
       'category': selectedCat,
       'discountBadge': _discountController.text.trim(),
-      'image': _imageController.text.trim().isNotEmpty ? _imageController.text.trim() : 'https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=400',
+      'image': _productImageUrl.isNotEmpty ? _productImageUrl : 'https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=400',
       'description': _descController.text.trim(),
     });
 
@@ -3220,7 +3167,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _priceController.clear();
     _discountController.clear();
     _descController.clear();
-    _imageController.clear();
+    _productImageUrl = '';
+    setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج ونشر الإشعار بنجاح')));
   }
 
@@ -3236,7 +3184,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       'currency': _bundleCurrency,
       'category': selectedBundleCat,
       'discountBadge': _bundleDiscountController.text.trim(),
-      'image': _bundleImageController.text.trim().isNotEmpty ? _bundleImageController.text.trim() : 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400',
+      'image': _bundleImageUrl.isNotEmpty ? _bundleImageUrl : 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400',
       'description': _bundleDescController.text.trim(),
       'isBundle': true,
     });
@@ -3253,8 +3201,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _bundlePriceController.clear();
     _bundleDiscountController.clear();
     _bundleDescController.clear();
-    _bundleImageController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر العرض/الباكدج بنجاح في قسم العروض المتصدر!')));
+    _bundleImageUrl = '';
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر العرض/الباكدج بنجاح في قسم العروض!')));
   }
 
   void _saveCourse() async {
@@ -3287,6 +3236,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       generatedCodes.add({
         'code': code,
         'isUsed': false,
+        'isDisabled': false,
         'usedBy': null,
         'userUid': null,
         'usedAt': null,
@@ -3501,14 +3451,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
             if (_hasPermissionForTab(3))
               ListTile(
                 leading: const Icon(Icons.vpn_key, color: Color(0xFFE52521)),
-                title: const Text('أكواد المواد', style: TextStyle(color: Colors.white)),
+                title: const Text('أكواد المواد وإدارتها', style: TextStyle(color: Colors.white)),
                 selected: _selectedTab == 3,
                 onTap: () { setState(() => _selectedTab = 3); Navigator.pop(context); },
               ),
             if (_hasPermissionForTab(4))
               ListTile(
                 leading: const Icon(Icons.analytics, color: Color(0xFFE52521)),
-                title: const Text('سجل المبيعات', style: TextStyle(color: Colors.white)),
+                title: const Text('سجل المبيعات والتاريخ', style: TextStyle(color: Colors.white)),
                 selected: _selectedTab == 4,
                 onTap: () { setState(() => _selectedTab = 4); Navigator.pop(context); },
               ),
@@ -3602,18 +3552,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 onChanged: (v) => setState(() => selectedCat = v!),
                 decoration: const InputDecoration(labelText: 'القسم', filled: true),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: _imageController, decoration: const InputDecoration(labelText: 'رابط الصورة', filled: true))),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), side: const BorderSide(color: Color(0xFFE52521))),
-                    onPressed: () => _openTelegramGallery(_imageController),
-                    icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE52521)),
-                    label: const Text('معرض تليغرام', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF14141C),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE52521), width: 1.5),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('صورة المنتج (من الاستوديو):', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                          onPressed: _isUploadingProductImage ? null : () => _pickAndUploadImage(isBundle: false),
+                          icon: _isUploadingProductImage 
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.photo_library_rounded, color: Colors.white),
+                          label: Text(_isUploadingProductImage ? 'جاري الرفع لفايربيز...' : 'اختر صورة من الاستوديو 🖼️', style: const TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                    if (_productImageUrl.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CachedNetworkImage(imageUrl: _productImageUrl, height: 100, width: 100, fit: BoxFit.cover),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text('تم حفظ الصورة بفايربيز بنجاح للأبد ✅', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               TextField(controller: _descController, maxLines: 3, decoration: const InputDecoration(labelText: 'التفاصيل', filled: true)),
@@ -3628,9 +3601,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('إضافة عرض أو باكدج جديد في المتجر (يظهر في المقدمة دائماً)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+              const Text('إضافة عرض أو باكدج جديد في المتجر', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
-              const Text('تدعم إضافة أكثر من صورة ومنشور ونسبة حسم مخصصة تظهر تلقائياً للزبائن.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const Text('اختر صورة الباكدج مباشرة من استوديو هاتفك لتخزينها على فايربيز.', style: TextStyle(color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 14),
               TextField(controller: _bundleTitleController, decoration: const InputDecoration(labelText: 'عنوان العرض أو الباكدج', filled: true)),
               const SizedBox(height: 12),
@@ -3659,18 +3632,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 onChanged: (v) => setState(() => selectedBundleCat = v!),
                 decoration: const InputDecoration(labelText: 'القسم التابع له', filled: true),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: _bundleImageController, decoration: const InputDecoration(labelText: 'رابط صورة الباكدج', filled: true))),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), side: const BorderSide(color: Color(0xFFE52521))),
-                    onPressed: () => _openTelegramGallery(_bundleImageController),
-                    icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE52521)),
-                    label: const Text('معرض تليغرام', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF14141C),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE52521), width: 1.5),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('صورة الباكدج (من الاستوديو):', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                          onPressed: _isUploadingBundleImage ? null : () => _pickAndUploadImage(isBundle: true),
+                          icon: _isUploadingBundleImage 
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.photo_library_rounded, color: Colors.white),
+                          label: Text(_isUploadingBundleImage ? 'جاري الرفع لفايربيز...' : 'اختر صورة العرض 🖼️', style: const TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                    if (_bundleImageUrl.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CachedNetworkImage(imageUrl: _bundleImageUrl, height: 100, width: 100, fit: BoxFit.cover),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text('تم حفظ الصورة بفايربيز بنجاح للأبد ✅', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               TextField(controller: _bundleDescController, maxLines: 3, decoration: const InputDecoration(labelText: 'تفاصيل العرض ومحتويات الباكدج', filled: true)),
@@ -3688,12 +3684,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('إضافة مادة وتوليد 2000 كود (سيرفر تليجرام الآمن)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+                  const Text('إضافة مادة وتوليد 2000 كود (فيديوهات يوتيوب غير مدرجة)', style: TextStyle(color: Color(0xFFE52521), fontSize: 16, fontWeight: FontWeight.w900)),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
                     onPressed: _showManageUniversitiesDialog,
                     icon: const Icon(Icons.settings, color: Color(0xFFE52521)),
-                    label: const Text('إدارة الجامعات والكليات', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    label: const Text('إدارة الجامعات', style: TextStyle(color: Colors.white, fontSize: 11)),
                   ),
                 ],
               ),
@@ -3750,7 +3746,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ],
               ),
               const SizedBox(height: 20),
-              const Text('إدارة المحاضرات (عبر معرض فيديوهات تليجرام الآمن):', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+              const Text('إدارة المحاضرات (روابط يوتيوب غير مدرجة - Unlisted):', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               ...lectureControllers.asMap().entries.map((entry) {
                 int idx = entry.key;
@@ -3768,13 +3764,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             child: TextField(
                               controller: lec['url'] as TextEditingController,
                               decoration: InputDecoration(
-                                labelText: 'رابط فيديو تليجرام الآمن ${idx + 1}',
+                                labelText: 'رابط يوتيوب غير مدرج ${idx + 1}',
                                 filled: true,
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.video_library_rounded, color: Color(0xFFE52521)),
-                                  onPressed: () => _openTelegramVideoGallery(lec['url'] as TextEditingController),
-                                  tooltip: 'اختر من معرض تليجرام الآمن',
-                                ),
                               ),
                             ),
                           ),
@@ -3815,37 +3806,78 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       case 3:
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('courses').snapshots(),
+          stream: FirebaseFirestore.instance.collection('courses').limit(50).snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
             var docs = snapshot.data!.docs;
             if (docs.isEmpty) return const Center(child: Text('لا توجد مقررات مضافة لعرض أكوادها', style: TextStyle(color: Colors.grey)));
 
-            return Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('إضافة وتدوير وإلغاء تفعيل الأكواد:', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _customCodeController,
+                          decoration: const InputDecoration(hintText: 'أدخل كود تفعيل مخصص يدوياً...', filled: true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                        icon: const Icon(Icons.add_circle, color: Colors.white),
+                        label: const Text('إضافة كود'),
+                        onPressed: () async {
+                          if (_customCodeController.text.trim().isNotEmpty && docs.isNotEmpty) {
+                            String code = _customCodeController.text.trim();
+                            await FirebaseFirestore.instance.collection('courses').doc(docs.first.id).update({
+                              'codes': FieldValue.arrayUnion([
+                                {
+                                  'code': code,
+                                  'isUsed': false,
+                                  'isDisabled': false,
+                                  'usedBy': null,
+                                  'userUid': null,
+                                  'usedAt': null,
+                                }
+                              ])
+                            });
+                            _customCodeController.clear();
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة الكود اليدوي بنجاح!')));
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Colors.white24, height: 30),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
                       var courseDoc = docs[index];
                       var course = courseDoc.data() as Map<String, dynamic>;
                       List codes = course['codes'] ?? [];
                       
-                      var unusedCodes = codes.where((c) => (c['isUsed'] == false || c['isUsed'] == null)).toList();
-                      var usedCodes = codes.where((c) => c['isUsed'] == true).toList();
+                      var activeCodes = codes.where((c) => (c['isUsed'] == false || c['isUsed'] == null) && (c['isDisabled'] != true)).toList();
+                      var disabledOrUsedCodes = codes.where((c) => c['isUsed'] == true || c['isDisabled'] == true).toList();
 
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16)),
                         child: ExpansionTile(
                           title: Text(course['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          subtitle: Text('مستعملة: ${usedCodes.length} | غير مستعملة: ${unusedCodes.length}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          subtitle: Text('نشطة ومتاحة: ${activeCodes.length} | مستعملة أو معطلة: ${disabledOrUsedCodes.length}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                           children: [
                             DefaultTabController(
                               length: 2,
                               child: SizedBox(
-                                height: 250,
+                                height: 280,
                                 child: Column(
                                   children: [
                                     const TabBar(
@@ -3854,23 +3886,53 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                       indicatorColor: Color(0xFFE52521),
                                       tabs: [
                                         Tab(text: 'الأكواد المتاحة'),
-                                        Tab(text: 'الأكواد المستعملة'),
+                                        Tab(text: 'المستعملة / المعطلة (تحكم)'),
                                       ],
                                     ),
                                     Expanded(
                                       child: TabBarView(
                                         children: [
                                           ListView.builder(
-                                            itemCount: unusedCodes.length,
-                                            itemBuilder: (context, uIdx) => ListTile(
-                                              title: Text('الكود: ${unusedCodes[uIdx]['code']}', style: const TextStyle(color: Colors.greenAccent)),
-                                            ),
+                                            itemCount: activeCodes.length,
+                                            itemBuilder: (context, uIdx) {
+                                              var aCode = activeCodes[uIdx];
+                                              return ListTile(
+                                                title: Text('الكود: ${aCode['code']}', style: const TextStyle(color: Colors.greenAccent)),
+                                                trailing: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                                                  onPressed: () async {
+                                                    aCode['isDisabled'] = true;
+                                                    await FirebaseFirestore.instance.collection('courses').doc(courseDoc.id).update({'codes': codes});
+                                                    setState(() {});
+                                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعطيل هذا الكود وإلغاء تفعيله! 🚫')));
+                                                  },
+                                                  child: const Text('تعطيل', style: TextStyle(color: Colors.white, fontSize: 11)),
+                                                ),
+                                              );
+                                            },
                                           ),
                                           ListView.builder(
-                                            itemCount: usedCodes.length,
-                                            itemBuilder: (context, sIdx) => ListTile(
-                                              title: Text('الكود: ${usedCodes[sIdx]['code']} (بواسطة: ${usedCodes[sIdx]['usedBy']})', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-                                            ),
+                                            itemCount: disabledOrUsedCodes.length,
+                                            itemBuilder: (context, sIdx) {
+                                              var uCode = disabledOrUsedCodes[sIdx];
+                                              bool isDis = uCode['isDisabled'] == true;
+                                              return ListTile(
+                                                title: Text('الكود: ${uCode['code']} (${isDis ? 'معطل يدويأ 🚫' : 'مستعمل بواسطة: ${uCode['usedBy']}'})', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                                trailing: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                                                  onPressed: () async {
+                                                    uCode['isUsed'] = false;
+                                                    uCode['isDisabled'] = false;
+                                                    uCode['usedBy'] = null;
+                                                    uCode['userUid'] = null;
+                                                    await FirebaseFirestore.instance.collection('courses').doc(courseDoc.id).update({'codes': codes});
+                                                    setState(() {});
+                                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إعادة تفعيل الكود ليصبح متاحاً مجدداً! ♻️')));
+                                                  },
+                                                  child: const Text('إعادة تفعيل', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                                                ),
+                                              );
+                                            },
                                           ),
                                         ],
                                       ),
@@ -3884,82 +3946,175 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       );
                     },
                   ),
-                ),
-              ],
+                ],
+              ),
             );
           },
         );
       case 4:
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('sales_log').orderBy('purchasedAt', descending: true).snapshots(),
+          stream: FirebaseFirestore.instance.collection('sales_log').orderBy('purchasedAt', descending: true).limit(200).snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
             var salesDocs = snapshot.data!.docs;
 
             var filteredSales = salesDocs.where((doc) {
-              if (salesSearchQuery.isEmpty) return true;
               var data = doc.data() as Map<String, dynamic>;
               String name = (data['userName'] ?? '').toLowerCase();
               String uid = (data['userUid'] ?? '').toLowerCase();
               String course = (data['courseTitle'] ?? '').toLowerCase();
-              return name.contains(salesSearchQuery) || uid.contains(salesSearchQuery) || course.contains(salesSearchQuery);
+              
+              bool matchQuery = salesSearchQuery.isEmpty || name.contains(salesSearchQuery) || uid.contains(salesSearchQuery) || course.contains(salesSearchQuery);
+              
+              bool matchDate = true;
+              if (salesDateFilter != 'الكل' && data['purchasedAt'] != null) {
+                Timestamp ts = data['purchasedAt'];
+                DateTime dt = ts.toDate();
+                DateTime now = DateTime.now();
+                if (salesDateFilter == 'اليوم') {
+                  matchDate = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+                } else if (salesDateFilter == 'آخر 7 أيام') {
+                  matchDate = now.difference(dt).inDays <= 7;
+                } else if (salesDateFilter == 'آخر 30 يوم') {
+                  matchDate = now.difference(dt).inDays <= 30;
+                }
+              }
+              return matchQuery && matchDate;
             }).toList();
 
             return Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: TextField(
-                    controller: _salesSearchController,
-                    decoration: InputDecoration(
-                      hintText: 'ابحث عن طالب بالاسم أو الأيدي أو المقرر...',
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFFE52521)),
-                      filled: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                    ),
-                    onChanged: (val) => setState(() => salesSearchQuery = val.trim().toLowerCase()),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _salesSearchController,
+                          decoration: InputDecoration(
+                            hintText: 'ابحث عن طالب بالاسم، الأيدي أو المقرر...',
+                            prefixIcon: const Icon(Icons.search, color: Color(0xFFE52521)),
+                            filled: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          ),
+                          onChanged: (val) => setState(() => salesSearchQuery = val.trim().toLowerCase()),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: salesDateFilter,
+                        dropdownColor: const Color(0xFF14141C),
+                        items: const [
+                          DropdownMenuItem(value: 'الكل', child: Text('كل الأيام', style: TextStyle(color: Colors.white, fontSize: 12))),
+                          DropdownMenuItem(value: 'اليوم', child: Text('اليوم', style: TextStyle(color: Colors.white, fontSize: 12))),
+                          DropdownMenuItem(value: 'آخر 7 أيام', child: Text('آخر 7 أيام', style: TextStyle(color: Colors.white, fontSize: 12))),
+                          DropdownMenuItem(value: 'آخر 30 يوم', child: Text('آخر 30 يوم', style: TextStyle(color: Colors.white, fontSize: 12))),
+                        ],
+                        onChanged: (val) => setState(() => salesDateFilter = val ?? 'الكل'),
+                      ),
+                    ],
                   ),
                 ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filteredSales.length,
-                    itemBuilder: (context, index) {
-                      var sData = filteredSales[index].data() as Map<String, dynamic>;
-                      String courseTitle = sData['courseTitle'] ?? 'مقرر';
-                      String university = sData['university'] ?? 'غير محدد';
-                      String college = sData['college'] ?? 'غير محدد';
-                      String price = sData['price']?.toString() ?? '0';
-                      String userName = sData['userName'] ?? 'طالب';
-                      String userUid = sData['userUid'] ?? '';
-                      String codeUsed = sData['codeUsed'] ?? '';
-                      var time = sData['purchasedAt'] as Timestamp?;
-                      String dateStr = time != null ? time.toDate().toString().substring(0, 16) : 'وقت حديث';
-
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16)),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(courseTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
-                                Text(price, style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text('الجامعة: $university | الكلية: $college', style: const TextStyle(color: Colors.amberAccent, fontSize: 12)),
-                            Text('الطالب: $userName', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                            Text('الأيدي (UID): $userUid | الكود: $codeUsed', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                            Text('التاريخ: $dateStr', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                          ],
+                if (_selectedSalesIds.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('تم تحديد ${_selectedSalesIds.length} عملية بيع', style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          icon: const Icon(Icons.delete, color: Colors.white),
+                          label: const Text('حذف المحدد', style: TextStyle(color: Colors.white)),
+                          onPressed: () async {
+                            for (String id in _selectedSalesIds) {
+                              await FirebaseFirestore.instance.collection('sales_log').doc(id).delete();
+                            }
+                            setState(() {
+                              _selectedSalesIds.clear();
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف المبيعات المحددة بنجاح')));
+                          },
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
+                Expanded(
+                  child: filteredSales.isEmpty
+                      ? const Center(child: Text('لا توجد عمليات بيع مطابقة للبحث أو الفترة', style: TextStyle(color: Colors.grey)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filteredSales.length,
+                          itemBuilder: (context, index) {
+                            var doc = filteredSales[index];
+                            var sData = doc.data() as Map<String, dynamic>;
+                            String docId = doc.id;
+                            bool isSelected = _selectedSalesIds.contains(docId);
+
+                            String courseTitle = sData['courseTitle'] ?? 'مقرر';
+                            String university = sData['university'] ?? 'غير محدد';
+                            String college = sData['college'] ?? 'غير محدد';
+                            String price = sData['price']?.toString() ?? '0';
+                            String userName = sData['userName'] ?? 'طالب';
+                            String userUid = sData['userUid'] ?? '';
+                            String codeUsed = sData['codeUsed'] ?? '';
+                            Timestamp? time = sData['purchasedAt'] as Timestamp?;
+                            String dateStr = time != null ? "${time.toDate().year}-${time.toDate().month.toString().padLeft(2, '0')}-${time.toDate().day.toString().padLeft(2, '0')} | الساعة: ${time.toDate().hour}:${time.toDate().minute.toString().padLeft(2, '0')}" : 'وقت غير متوفر';
+
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF14141C),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: isSelected ? const Color(0xFFE52521) : const Color(0xFF2E2E3A), width: isSelected ? 2 : 1),
+                              ),
+                              child: CheckboxListTile(
+                                value: isSelected,
+                                activeColor: const Color(0xFFE52521),
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedSalesIds.add(docId);
+                                    } else {
+                                      _selectedSalesIds.remove(docId);
+                                    }
+                                  });
+                                },
+                                title: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(courseTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15))),
+                                    Text(price, style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    Text('🏛️ $university | 📚 $college', style: const TextStyle(color: Colors.amberAccent, fontSize: 12)),
+                                    Text('👤 الطالب: $userName', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                    Text('🆔 الأيدي: $userUid | الكود: $codeUsed', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('🕒 التاريخ والوقت: $dateStr', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 11, fontWeight: FontWeight.bold)),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                          onPressed: () async {
+                                            await FirebaseFirestore.instance.collection('sales_log').doc(docId).delete();
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف عملية البيع بنجاح')));
+                                          },
+                                          tooltip: 'حذف عملية البيع',
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
               ],
             );
@@ -3967,7 +4122,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       case 5:
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('courses').snapshots(),
+          stream: FirebaseFirestore.instance.collection('courses').limit(100).snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
             var courseDocs = snapshot.data!.docs;
@@ -4066,7 +4221,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       case 6:
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('sub_admins').snapshots(),
+          stream: FirebaseFirestore.instance.collection('sub_admins').limit(50).snapshots(),
           builder: (context, snapshot) {
             var subAdmins = snapshot.hasData ? snapshot.data!.docs : [];
             final subNameController = TextEditingController();
@@ -4128,7 +4283,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           subPhoneController.clear();
                           subPassController.clear();
                           setState(() {});
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة حساب المشرف مع صلاحياته بدقة!')));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة حساب المشرف والصلاحيات بدقة!')));
                         },
                         child: const Text('إضافة حساب مشرف بالصلاحيات المحددة'),
                       ),
@@ -4190,17 +4345,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('إدارة البانر الإعلاني الرئيسي في المتجر', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+              const Text('إدارة الإعلان (يظهر كبطاقة منتج أول شبكة المتجر)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
-              const Text('انشر فيديو يوتيوب أو رابط ريلز إنستا (Instagram Reel) أو صورة إعلانية تظهر في أعلى واجهة المتجر.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const Text('ضع رابط يوتيوب أو رابط إنستغرام (ريلز/صفحة) ليظهر تلقائياً كأول عنصر في المنتجات.', style: TextStyle(color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 20),
-              TextField(controller: _adUrlController, decoration: const InputDecoration(labelText: 'رابط الإعلان (يوتيوب، ريلز انستا، أو صورة مباشرة)', filled: true)),
+              TextField(controller: _adUrlController, decoration: const InputDecoration(labelText: 'رابط الإعلان (يوتيوب أو إنستغرام)', filled: true)),
               const SizedBox(height: 12),
               SwitchListTile(
-                title: const Text('هل الإعلان عبارة عن فيديو (يوتيوب أو ريلز إنستا)؟', style: TextStyle(color: Colors.white)),
+                title: const Text('هل الإعلان عبارة عن فيديو (يوتيوب أو ريلز انستا)؟', style: TextStyle(color: Colors.white)),
                 value: _isAdVideo,
                 activeColor: const Color(0xFFE52521),
                 onChanged: (val) => setState(() => _isAdVideo = val),
+              ),
+              SwitchListTile(
+                title: const Text('تفعيل وإظهار الإعلان في المتجر (تشغيل/إيقاف)', style: TextStyle(color: Colors.white)),
+                value: _isAdActive,
+                activeColor: Colors.green,
+                onChanged: (val) => setState(() => _isAdActive = val),
               ),
               const SizedBox(height: 20),
               Row(
@@ -4209,14 +4370,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
                       onPressed: _saveAdBanner,
-                      child: const Text('نشر وتحديث الإعلان بالمتجر'),
+                      child: const Text('حفظ ونشر الإعلان بالمتجر'),
                     ),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     onPressed: _deleteAdBanner,
-                    child: const Text('حذف الإعلان الحالي'),
+                    child: const Text('حذف الإعلان وإلغاؤه'),
                   ),
                 ],
               ),
