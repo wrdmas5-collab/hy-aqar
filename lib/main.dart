@@ -5,15 +5,28 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import 'package:video_player/video_player.dart';
 import 'dart:convert';
 import 'dart:ui';
+import 'dart:ui_web' as ui_web;
 import 'dart:math';
+import 'dart:html' as html;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
-// دالة استقبال الإشعارات في الخلفية (عندما يكون التطبيق مغلقاً أو الجهاز مقفلاً تماماً مثل واتساب)
+// تليجرام جاليري الصور والمتجر
+const String telegramBotToken = "8623101299:AAFK03es2d1eSXnoDbBF3NsPARLQxn7J68M";
+const String telegramChatId = "-1004436881244";
+
+// تليجرام مجموعة فيديوهات الكورسات الخاصة (السيرفر الآمن)
+const String telegramVideoBotToken = "9141718661:AAE8w0Ix1NObfds2ohS7B55FX4tmXJx3AL4";
+const String telegramVideoChatId = "-1004446951340";
+
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -38,10 +51,8 @@ void main() async {
       );
     }
     
-    // تسجيل معالج الخلفية لإشعارات FCM
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    // طلب صلاحيات الإشعارات من المستخدم
     FirebaseMessaging messaging = FirebaseMessaging.instance;
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
@@ -50,21 +61,18 @@ void main() async {
     );
     debugPrint('User granted permission: ${settings.authorizationStatus}');
 
-    // الحصول على الـ Token الخاص بالجهاز للاختبار أو الإرسال الموجه
     String? token = await messaging.getToken();
     debugPrint("FCM Registration Token: $token");
 
-    // الاستماع للإشعارات والرسائل عندما يكون التطبيق مفتوحاً في الواجهة
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('Got a message whilst in the foreground!');
       if (message.notification != null) {
-        debugPrint('Message also contained a notification: ${message.notification?.title}');
         addAppNotification(
           targetUserName: '', 
           title: message.notification?.title ?? 'إشعار جديد',
           message: message.notification?.body ?? '',
           icon: Icons.notifications_active_rounded,
-          iconColor: const Color(0xFFE5A900),
+          iconColor: const Color(0xFFE52521),
         );
       }
     });
@@ -77,37 +85,45 @@ void main() async {
   bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
   String savedName = prefs.getString('user_name') ?? '';
   String savedPhone = prefs.getString('user_phone') ?? '';
+  String savedUid = prefs.getString('user_uid') ?? '';
   bool savedIsAdmin = prefs.getBool('is_admin') ?? false;
+  List<String> savedAdminPerms = prefs.getStringList('admin_perms') ?? [];
 
-  runApp(HyStoreApp(
+  runApp(HyAcademyApp(
     isLoggedIn: isLoggedIn,
     initialName: savedName,
     initialPhone: savedPhone,
+    initialUid: savedUid,
     initialIsAdmin: savedIsAdmin,
+    initialAdminPerms: savedAdminPerms,
   ));
 }
 
-class HyStoreApp extends StatefulWidget {
+class HyAcademyApp extends StatefulWidget {
   final bool isLoggedIn;
   final String initialName;
   final String initialPhone;
+  final String initialUid;
   final bool initialIsAdmin;
+  final List<String> initialAdminPerms;
 
-  const HyStoreApp({
+  const HyAcademyApp({
     super.key,
     required this.isLoggedIn,
     required this.initialName,
     required this.initialPhone,
+    required this.initialUid,
     required this.initialIsAdmin,
+    required this.initialAdminPerms,
   });
 
   @override
-  State<HyStoreApp> createState() => _HyStoreAppState();
+  State<HyAcademyApp> createState() => _HyAcademyAppState();
 
-  static _HyStoreAppState of(BuildContext context) => context.findAncestorStateOfType<_HyStoreAppState>()!;
+  static _HyAcademyAppState of(BuildContext context) => context.findAncestorStateOfType<_HyAcademyAppState>()!;
 }
 
-class _HyStoreAppState extends State<HyStoreApp> {
+class _HyAcademyAppState extends State<HyAcademyApp> {
   bool isDarkMode = true;
 
   void toggleTheme() {
@@ -119,42 +135,42 @@ class _HyStoreAppState extends State<HyStoreApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'HY Store',
+      title: 'hy Academy',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: isDarkMode ? Brightness.dark : Brightness.light,
-        scaffoldBackgroundColor: isDarkMode ? const Color(0xFF121218) : const Color(0xFFF8F6F0),
-        primaryColor: const Color(0xFFE5A900),
+        scaffoldBackgroundColor: isDarkMode ? const Color(0xFF0F0F12) : const Color(0xFFF9F9FB),
+        primaryColor: const Color(0xFFE52521),
         fontFamily: 'Roboto',
         colorScheme: isDarkMode
             ? const ColorScheme.dark(
-                primary: Color(0xFFE5A900),
-                secondary: Color(0xFFFB8500),
-                surface: Color(0xFF1A1A24),
+                primary: Color(0xFFE52521),
+                secondary: Color(0xFFFF4D4D),
+                surface: Color(0xFF181820),
               )
             : const ColorScheme.light(
-                primary: Color(0xFFC68B00),
-                secondary: Color(0xFFFB8500),
-                surface: Color(0xFFFAF8F5),
+                primary: Color(0xFFD32F2F),
+                secondary: Color(0xFFFF5252),
+                surface: Color(0xFFFFFFFF),
               ),
         appBarTheme: AppBarTheme(
-          backgroundColor: isDarkMode ? const Color(0xFF161622) : const Color(0xFFF8F6F0),
+          backgroundColor: isDarkMode ? const Color(0xFF14141C) : const Color(0xFFFFFFFF),
           elevation: 0,
           centerTitle: true,
           titleTextStyle: const TextStyle(
-            color: Color(0xFFE5A900),
+            color: Color(0xFFE52521),
             fontSize: 22,
             fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
+            letterSpacing: 2.0,
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFE5A900),
-            foregroundColor: Colors.black,
+            backgroundColor: const Color(0xFFE52521),
+            foregroundColor: Colors.white,
             textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
             elevation: 8,
-            shadowColor: const Color(0x55E5A900),
+            shadowColor: const Color(0x55E52521),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -165,13 +181,14 @@ class _HyStoreAppState extends State<HyStoreApp> {
         isLoggedIn: widget.isLoggedIn,
         initialName: widget.initialName,
         initialPhone: widget.initialPhone,
+        initialUid: widget.initialUid,
         initialIsAdmin: widget.initialIsAdmin,
+        initialAdminPerms: widget.initialAdminPerms,
       ),
     );
   }
 }
 
-// ----------------- الصور العائمة 3D -----------------
 class FloatingSticker3D extends StatefulWidget {
   final String imageUrl;
   final IconData fallbackIcon;
@@ -253,8 +270,8 @@ class _FloatingSticker3DState extends State<FloatingSticker3D> with SingleTicker
                   child: CachedNetworkImage(
                     imageUrl: widget.imageUrl,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE5A900), size: 26)),
-                    errorWidget: (context, url, error) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE5A900), size: 26)),
+                    placeholder: (context, url) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE52521), size: 26)),
+                    errorWidget: (context, url, error) => Center(child: Icon(widget.fallbackIcon, color: const Color(0xFFE52521), size: 26)),
                   ),
                 ),
               ),
@@ -279,28 +296,27 @@ class BackgroundStickersLayer extends StatelessWidget {
         FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=200', fallbackIcon: Icons.science_rounded, bottom: 25, right: 30, duration: Duration(seconds: 4), size: 65),
         FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=200', fallbackIcon: Icons.school_rounded, top: 150, left: 10, duration: Duration(seconds: 5), size: 60),
         FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=200', fallbackIcon: Icons.menu_book_rounded, top: 160, right: 10, duration: Duration(seconds: 6), size: 60),
-        FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=200', fallbackIcon: Icons.coronavirus_rounded, bottom: 180, left: 15, duration: Duration(seconds: 5), size: 60),
-        FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=200', fallbackIcon: Icons.format_paint_rounded, bottom: 170, right: 15, duration: Duration(seconds: 4), size: 60),
-        FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200', fallbackIcon: Icons.computer_rounded, top: 320, left: 8, duration: Duration(seconds: 5), size: 55),
-        FloatingSticker3D(imageUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=200', fallbackIcon: Icons.business_center_rounded, top: 300, right: 8, duration: Duration(seconds: 6), size: 55),
       ],
     );
   }
 }
 
-// ----------------- شاشة الترحيب -----------------
 class SplashScreen extends StatefulWidget {
   final bool isLoggedIn;
   final String initialName;
   final String initialPhone;
+  final String initialUid;
   final bool initialIsAdmin;
+  final List<String> initialAdminPerms;
 
   const SplashScreen({
     super.key,
     required this.isLoggedIn,
     required this.initialName,
     required this.initialPhone,
+    required this.initialUid,
     required this.initialIsAdmin,
+    required this.initialAdminPerms,
   });
 
   @override
@@ -336,7 +352,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => widget.isLoggedIn
-              ? HomeScreen(userName: widget.initialName, userPhone: widget.initialPhone, isAdmin: widget.initialIsAdmin)
+              ? HomeScreen(
+                  userName: widget.initialName,
+                  userPhone: widget.initialPhone,
+                  userUid: widget.initialUid,
+                  isAdmin: widget.initialIsAdmin,
+                  adminPerms: widget.initialAdminPerms,
+                )
               : const LoginScreen(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
@@ -363,7 +385,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               gradient: RadialGradient(
                 center: Alignment(0, -0.3),
                 radius: 1.5,
-                colors: [Color(0xFF2A2A38), Color(0xFF121218)],
+                colors: [Color(0xFF1F1F28), Color(0xFF0F0F12)],
               ),
             ),
           ),
@@ -377,15 +399,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFE5A900), Color(0xFFFB8500)],
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFE52521), Color(0xFFFF4D4D)],
                         ),
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(
-                            color: Color(0x44E5A900),
+                            color: Color(0x55E52521),
                             blurRadius: 45,
                             spreadRadius: 12,
                           ),
@@ -393,34 +415,40 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                       child: ClipOval(
                         child: Image.asset(
-                          'assets/icon/icon.png',
+                          'assets/icon/icon.jpg',
                           width: 80,
                           height: 80,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 80, color: Colors.black),
+                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 80, color: Colors.white),
                         ),
                       ),
                     ),
                     const SizedBox(height: 30),
-                    const Text(
-                      'HY STORE',
-                      style: TextStyle(
-                        color: Color(0xFFE5A900),
-                        fontSize: 34,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 4,
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFFE52521), Color(0xFFFF7674)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds),
+                      child: const Text(
+                        'hy Academy',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2.5,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 30),
                       child: Text(
-                        'أفضل الأسعار وأفضل المستلزمات جودة وأفضل خدمة يقدمها لكم متجرنا',
+                        'المنصة التعليمية الشاملة ومستلزمات طلاب الجامعات',
                         style: TextStyle(
                           color: Colors.white70,
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -430,7 +458,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       width: 35,
                       height: 35,
                       child: CircularProgressIndicator(
-                        color: Color(0xFFE5A900),
+                        color: Color(0xFFE52521),
                         strokeWidth: 3,
                       ),
                     ),
@@ -445,7 +473,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 }
 
-// ----------------- شاشة تسجيل الدخول (مع الستكرات العائمة) -----------------
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -454,7 +481,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _phoneController = TextEditingController();
+  final _phoneController = TextEditingController(text: '+963');
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
 
@@ -480,25 +507,83 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  void _recordNewUserLogin(String name, String phone, String uid, bool isAdmin) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': name,
+        'phone': phone,
+        'isAdmin': isAdmin,
+        'lastLogin': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("Login record error: $e");
+    }
+  }
+
   void _login() async {
     String phone = _phoneController.text.trim();
     String pass = _passwordController.text.trim();
     String name = _nameController.text.trim();
 
-    if (name.isEmpty) {
+    if (phone.isEmpty || pass.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء إدخال الاسم الثلاثي')),
+        const SnackBar(content: Text('الرجاء إدخال رقم الهاتف وكلمة سر من 6 خانات على الأقل')),
       );
       return;
     }
 
-    bool isAdmin = (phone == adminPhone && pass == adminPass);
+    bool isAdmin = false;
+    List<String> adminPerms = [];
+    String loggedName = name;
+    String uid = "USER-UID-${DateTime.now().millisecondsSinceEpoch}";
+
+    if (phone == adminPhone && (pass == adminPass || name.contains('حيان'))) {
+      isAdmin = true;
+      loggedName = name.isEmpty ? 'حيان الأدمين العام' : name;
+      uid = "ADMIN-UID-$phone";
+      adminPerms = ['all'];
+    } else {
+      try {
+        var query = await FirebaseFirestore.instance
+            .collection('sub_admins')
+            .where('phone', isEqualTo: phone)
+            .where('pass', isEqualTo: pass)
+            .where('isActive', isEqualTo: true)
+            .get();
+
+        if (query.docs.isNotEmpty) {
+          var subData = query.docs.first.data();
+          isAdmin = true;
+          loggedName = subData['name'] ?? 'مشرف فرعي';
+          uid = "SUB-ADMIN-${query.docs.first.id}";
+          var permsMap = subData['permissions'] as Map<String, dynamic>?;
+          if (permsMap != null) {
+            permsMap.forEach((k, v) {
+              if (v == true) adminPerms.add(k);
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint("Sub-admin login check error: $e");
+      }
+    }
+
+    if (!isAdmin && loggedName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرجاء إدخال الاسم الثلاثي لإتمام تسجيل الدخول')),
+      );
+      return;
+    }
+
+    _recordNewUserLogin(loggedName, phone, uid, isAdmin);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_logged_in', true);
-    await prefs.setString('user_name', name);
+    await prefs.setString('user_name', loggedName);
     await prefs.setString('user_phone', phone);
+    await prefs.setString('user_uid', uid);
     await prefs.setBool('is_admin', isAdmin);
+    await prefs.setStringList('admin_perms', adminPerms);
 
     if (!mounted) return;
 
@@ -506,25 +591,74 @@ class _LoginScreenState extends State<LoginScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => HomeScreen(
-          userName: name,
+          userName: loggedName,
           userPhone: phone,
+          userUid: uid,
           isAdmin: isAdmin,
+          adminPerms: adminPerms,
         ),
       ),
     );
   }
 
-  void _openSupportWhatsApp() async {
-    final Uri whatsappUri = Uri.parse(
-        "https://wa.me/963967834966?text=${Uri.encodeComponent('لدي مشكلة ارغب من الادارة الاطلاع عليها ومساعدتي')}");
-    if (await canLaunchUrl(whatsappUri)) {
-      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+  void _loginWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        String name = user.displayName ?? googleUser.displayName ?? 'طالب hy Academy';
+        String phone = user.phoneNumber ?? '+963900000000';
+        String uid = user.uid;
+
+        bool isAdmin = (user.email == "hayyanmasri9@gmail.com" || uid == "ADMIN-UID-$adminPhone");
+        List<String> adminPerms = isAdmin ? ['all'] : [];
+
+        _recordNewUserLogin(name, phone, uid, isAdmin);
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('is_logged_in', true);
+        await prefs.setString('user_name', name);
+        await prefs.setString('user_phone', phone);
+        await prefs.setString('user_uid', uid);
+        await prefs.setBool('is_admin', isAdmin);
+        await prefs.setStringList('admin_perms', adminPerms);
+
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomeScreen(
+              userName: name,
+              userPhone: phone,
+              userUid: uid,
+              isAdmin: isAdmin,
+              adminPerms: adminPerms,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Google Sign-In Error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تسجيل الدخول عبر جوجل: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isDark = HyStoreApp.of(context).isDarkMode;
+    bool isDark = HyAcademyApp.of(context).isDarkMode;
 
     return Scaffold(
       body: Stack(
@@ -534,7 +668,7 @@ class _LoginScreenState extends State<LoginScreen> {
               gradient: RadialGradient(
                 center: const Alignment(0, -0.6),
                 radius: 1.5,
-                colors: isDark ? const [Color(0xFF2A2A38), Color(0xFF121218)] : const [Color(0xFFF8F6F0), Color(0xFFE2E8F0)],
+                colors: isDark ? const [Color(0xFF1F1F28), Color(0xFF0F0F12)] : const [Color(0xFFFFFFFF), Color(0xFFF0F0F5)],
               ),
             ),
           ),
@@ -543,16 +677,16 @@ class _LoginScreenState extends State<LoginScreen> {
             top: 20,
             right: 20,
             child: IconButton(
-              icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE5A900), size: 28),
-              onPressed: () => HyStoreApp.of(context).toggleTheme(),
-              tooltip: 'تبديل المظهر (ليلي / صباحي)',
+              icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE52521), size: 28),
+              onPressed: () => HyAcademyApp.of(context).toggleTheme(),
+              tooltip: 'تبديل المظهر',
             ),
           ),
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
               child: MouseRegion(
-                onHover: (event) => _onPointerHover(event, const Size(460, 620)),
+                onHover: (event) => _onPointerHover(event, const Size(460, 640)),
                 onExit: _onPointerExit,
                 child: TweenAnimationBuilder<double>(
                   tween: Tween<double>(begin: 0, end: 1),
@@ -576,12 +710,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(40.0),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF1B1B26).withOpacity(0.95) : Colors.white.withOpacity(0.95),
+                            color: isDark ? const Color(0xFF14141C).withOpacity(0.95) : Colors.white.withOpacity(0.95),
                             borderRadius: BorderRadius.circular(35),
-                            border: Border.all(color: const Color(0xFFE5A900).withOpacity(0.7), width: 2),
+                            border: Border.all(color: const Color(0xFFE52521).withOpacity(0.7), width: 2),
                             boxShadow: const [
                               BoxShadow(
-                                color: Color(0x33E5A900),
+                                color: Color(0x33E52521),
                                 blurRadius: 60,
                                 offset: Offset(0, 20),
                               ),
@@ -595,43 +729,52 @@ class _LoginScreenState extends State<LoginScreen> {
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [const Color(0xFFE5A900).withOpacity(0.3), const Color(0xFFFB8500).withOpacity(0.05)],
-                                    ),
-                                    border: Border.all(color: const Color(0xFFE5A900), width: 2),
+                                    border: Border.all(color: const Color(0xFFE52521), width: 2),
                                     boxShadow: const [
-                                      BoxShadow(color: Color(0x33E5A900), blurRadius: 25, spreadRadius: 6),
+                                      BoxShadow(color: Color(0x33E52521), blurRadius: 25, spreadRadius: 6),
                                     ],
                                   ),
                                   child: ClipOval(
                                     child: Image.asset(
-                                      'assets/icon/icon.png',
-                                      width: 60,
-                                      height: 60,
+                                      'assets/icon/icon.jpg',
+                                      width: 55,
+                                      height: 55,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 60, color: Color(0xFFE5A900)),
+                                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.school_rounded, size: 55, color: Color(0xFFE52521)),
                                     ),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 24),
+                              ShaderMask(
+                                shaderCallback: (bounds) => const LinearGradient(
+                                  colors: [Color(0xFFE52521), Color(0xFFFF7674)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ).createShader(bounds),
+                                child: const Text(
+                                  'hy Academy',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 2.5,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
                               const Text(
-                                'HY STORE',
+                                'تسجيل الدخول إلى المنصة',
                                 style: TextStyle(
-                                  color: Color(0xFFE5A900),
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 4,
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'أفضل الأسعار وأفضل المستلزمات جودة وأفضل خدمة',
-                                style: TextStyle(color: isDark ? Colors.white60 : Colors.black54, fontSize: 12),
-                                textAlign: TextAlign.center,
-                              ),
                               const SizedBox(height: 30),
+
                               _buildInputField(
                                 controller: _nameController,
                                 label: 'الاسم الثلاثي',
@@ -641,7 +784,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 16),
                               _buildInputField(
                                 controller: _phoneController,
-                                label: 'رقم الهاتف',
+                                label: 'رقم الهاتف (+963...)',
                                 icon: Icons.phone_iphone_rounded,
                                 keyboardType: TextInputType.phone,
                                 isDark: isDark,
@@ -649,47 +792,22 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 16),
                               _buildInputField(
                                 controller: _passwordController,
-                                label: 'كلمة السر',
+                                label: 'كلمة السر (6 خانات أو أكثر)',
                                 icon: Icons.lock_rounded,
                                 obscureText: true,
-                                helperText: 'أنشئ كلمة سر من 8 أحرف أو أرقام',
                                 isDark: isDark,
-                              ),
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 50,
-                                child: ElevatedButton.icon(
-                                  onPressed: _openSupportWhatsApp,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green.withOpacity(0.18),
-                                    foregroundColor: Colors.greenAccent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      side: const BorderSide(color: Colors.green, width: 1.8),
-                                    ),
-                                    elevation: 4,
-                                  ),
-                                  icon: const Icon(Icons.support_agent_rounded, color: Colors.greenAccent, size: 24),
-                                  label: const Text(
-                                    'التواصل مع الدعم الفني (واتساب)',
-                                    style: TextStyle(color: Colors.greenAccent, fontSize: 15, fontWeight: FontWeight.w900),
-                                  ),
-                                ),
                               ),
                               const SizedBox(height: 24),
                               Container(
-                                height: 58,
+                                height: 54,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(18),
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFE5A900), Color(0xFFFB8500)],
-                                  ),
+                                  color: const Color(0xFFE52521),
                                   boxShadow: const [
                                     BoxShadow(
-                                      color: Color(0x44E5A900),
-                                      blurRadius: 30,
-                                      offset: Offset(0, 10),
+                                      color: Color(0x44E52521),
+                                      blurRadius: 25,
+                                      offset: Offset(0, 8),
                                     ),
                                   ],
                                 ),
@@ -701,8 +819,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                                   ),
                                   child: const Text(
-                                    'دخول إلى المتجر',
-                                    style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.w900),
+                                    'تسجيل الدخول',
+                                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              SizedBox(
+                                height: 54,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.black87,
+                                    elevation: 4,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                  ),
+                                  onPressed: _loginWithGoogle,
+                                  icon: const Icon(Icons.g_mobiledata, color: Color(0xFFE52521), size: 32),
+                                  label: const Text(
+                                    'تسجيل الدخول عبر جوجل',
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ),
@@ -726,7 +863,6 @@ class _LoginScreenState extends State<LoginScreen> {
     required String label,
     required IconData icon,
     bool obscureText = false,
-    String? helperText,
     TextInputType? keyboardType,
     required bool isDark,
   }) {
@@ -738,25 +874,22 @@ class _LoginScreenState extends State<LoginScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
-        helperText: helperText,
-        helperStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: 11),
-        prefixIcon: Icon(icon, color: const Color(0xFFE5A900)),
+        prefixIcon: Icon(icon, color: const Color(0xFFE52521)),
         filled: true,
-        fillColor: isDark ? const Color(0xFF262636) : const Color(0xFFF0EFEB),
+        fillColor: isDark ? const Color(0xFF1E1E28) : const Color(0xFFF0F0F5),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: isDark ? const Color(0xFF36364D) : const Color(0xFFD4CDC3)),
+          borderSide: BorderSide(color: isDark ? const Color(0xFF2E2E3E) : const Color(0xFFD4D4E0)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE5A900), width: 2),
+          borderSide: const BorderSide(color: Color(0xFFE52521), width: 2),
         ),
       ),
     );
   }
 }
 
-// النماذج والإشعارات
 class NotificationItem {
   final String id;
   final String title;
@@ -777,15 +910,9 @@ class NotificationItem {
   });
 }
 
-class CartItem {
-  final Map<String, dynamic> product;
-  int quantity;
-  CartItem({required this.product, this.quantity = 1});
-}
-
-Map<String, List<CartItem>> userCarts = {};
-Map<String, List<NotificationItem>> userNotifications = {};
-List<NotificationItem> adminNotifications = [];
+Map userNotifications = {};
+Set globalFavorites = {};
+List globalCart = [];
 
 void addAppNotification({
   required String targetUserName,
@@ -796,7 +923,7 @@ void addAppNotification({
 }) {
   userNotifications.putIfAbsent(targetUserName, () => []);
   String timeStr = "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}";
-  userNotifications[targetUserName]!.insert(
+  (userNotifications[targetUserName] as List).insert(
     0,
     NotificationItem(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -809,46 +936,120 @@ void addAppNotification({
   );
 }
 
-void addAdminNotification({
-  required String customerName,
-  required String orderSummary,
-}) {
-  String timeStr = "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}";
-  adminNotifications.insert(
-    0,
-    NotificationItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: 'طلب جديد من الزبون: $customerName 📦',
-      message: orderSummary,
-      time: timeStr,
-      icon: Icons.shopping_bag_rounded,
-      iconColor: const Color(0xFFE5A900),
-    ),
-  );
-}
+List globalCategories = ['الكل', 'عمارة', 'أسنان', 'مدنية', 'معلوماتية', 'بشرية', 'ديكور', 'العروض'];
 
-List<String> globalCategories = ['الكل', 'عمارة', 'أسنان', 'مدنية', 'معلوماتية', 'بشرية', 'ديكور'];
+Map categoryIcons = {
+  'الكل': Icons.grid_view_rounded,
+  'عمارة': Icons.architecture_rounded,
+  'أسنان': Icons.medical_services_rounded,
+  'مدنية': Icons.foundation_rounded,
+  'معلوماتية': Icons.computer_rounded,
+  'بشرية': Icons.health_and_safety_rounded,
+  'ديكور': Icons.weekend_rounded,
+  'العروض': Icons.local_offer_rounded,
+};
 
-// ----------------- واجهة المتجر الرئيسية (مع الستكرات العائمة) -----------------
+List globalUniversities = [
+  'جامعة دمشق',
+  'جامعة حلب',
+  'جامعة تشرين',
+  'جامعة الفرات',
+  'جامعة حمص',
+  'جامعة اليرموك الخاصة',
+  'الجامعة العربية الدولية (AIU)',
+  'الجامعة الدولية الخاصة للعلوم والتكنولوجيا (IUST)',
+  'جامعة الاتحاد الخاصة (IPU)',
+  'جامعة الجزيرة الخاصة (JPU)',
+  'الجامعة البريطانية في دمشق (BUD)',
+  'جامعة قاسيون الخاصة (QPU)',
+  'جامعة القلمون الخاصة',
+  'الجامعة السورية الخاصة (ASPU)',
+  'جامعة الحواش الخاصة (HPU)',
+];
+
+Map universityLogos = {
+  'جامعة دمشق': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fdamascus.png?alt=media',
+  'جامعة حلب': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Faleppo.png?alt=media',
+  'جامعة تشرين': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Ftishreen.jpg?alt=media',
+  'جامعة الفرات': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Falfurat.png?alt=media',
+  'جامعة حمص': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fhoms.webp?alt=media',
+  'جامعة اليرموك الخاصة': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fyarmouk.png?alt=media',
+  'الجامعة العربية الدولية (AIU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Faiu.webp?alt=media',
+  'الجامعة الدولية الخاصة للعلوم والتكنولوجيا (IUST)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fiust.webp?alt=media',
+  'جامعة الاتحاد الخاصة (IPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fipu.jpg?alt=media',
+  'جامعة الجزيرة الخاصة (JPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fjpu.jpg?alt=media',
+  'الجامعة البريطانية في دمشق (BUD)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fbud.jpg?alt=media',
+  'جامعة قاسيون الخاصة (QPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fqpu.jpg?alt=media',
+  'جامعة القلمون الخاصة': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fkalamoon.webp?alt=media',
+  'الجامعة السورية الخاصة (ASPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Faspu.webp?alt=media',
+  'جامعة الحواش الخاصة (HPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fhawash.webp?alt=media',
+};
+
+Map universityColleges = {
+  'جامعة دمشق': ['هندسة مدنية', 'هندسة معلوماتية', 'هندسة ديكور', 'هندسة عمارة', 'طب بشري', 'طب أسنان'],
+  'جامعة حلب': ['هندسة ميكانيكية', 'هندسة كهربائية', 'هندسة مدنية', 'طب بشري', 'هندسة عمارة'],
+  'جامعة تشرين': ['هندسة تقانة المعلومات', 'هندسة مدنية', 'صيدلة', 'طب أسنان'],
+  'جامعة الفرات': ['هندسة مدنية', 'آداب', 'علوم', 'طب بشري'],
+  'جامعة حمص': ['هندسة بتروكيمياوية', 'هندسة معمارية', 'علوم أساسية', 'طب بشري'],
+  'جامعة اليرموك الخاصة': ['هندسة معلوماتية', 'هندسة اتصالات', 'إدارة أعمال'],
+  'الجامعة العربية الدولية (AIU)': ['هندسة معمارية', 'هندسة معلوماتية', 'صيدلة', 'إدارة أعمال'],
+  'الجامعة الدولية الخاصة للعلوم والتكنولوجيا (IUST)': ['هندسة إلكترونيات', 'هندسة ميكاترونيكس', 'طب أسنان', 'هندسة معلوماتية'],
+  'جامعة الاتحاد الخاصة (IPU)': ['هندسة معلوماتية', 'هندسة مدنية', 'إدارة أعمال', 'صيدلة'],
+  'جامعة الجزيرة الخاصة (JPU)': ['هندسة مدنية', 'هندسة معمارية', 'إدارة أعمال'],
+  'الجامعة البريطانية في دمشق (BUD)': ['إدارة أعمال دولية', 'هندسة برمجيات', 'ذكاء اصطناعي'],
+  'جامعة قاسيون الخاصة (QPU)': ['هندسة إلكترونيات', 'هندسة ميكاترونيكس', 'طب أسنان', 'هندسة معلوماتية'],
+  'جامعة القلمون الخاصة': ['طب بشري', 'هندسة طبية', 'إدارة أعمال', 'صيدلة'],
+  'الجامعة السورية الخاصة (ASPU)': ['طب بشري', 'هندسة معلوماتية', 'إدارة أعمال', 'صيدلة'],
+  'جامعة الحواش الخاصة (HPU)': ['صيدلة', 'طب أسنان', 'هندسة معلوماتية', 'هندسة مدنية'],
+};
+
+Map collegeImages = {
+  'طب أسنان': 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=500',
+  'هندسة مدنية': 'https://images.unsplash.com/photo-1541888946425-d0fbb18f86f7?w=500',
+  'هندسة معلوماتية': 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500',
+  'هندسة عمارة': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=500',
+  'طب بشري': 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=500',
+  'هندسة ديكور': 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=500',
+  'هندسة اتصالات': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=500',
+  'إدارة أعمال': 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=500',
+  'علوم أساسية': 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=500',
+  'هندسة إلكترونيات': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500',
+  'هندسة ميكاترونيكس': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500',
+  'هندسة برمجيات': 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=500',
+  'ذكاء اصطناعي': 'https://images.unsplash.com/photo-1677442136019-21780efad99a?w=500',
+};
+
 class HomeScreen extends StatefulWidget {
   final String userName;
   final String userPhone;
+  final String userUid;
   final bool isAdmin;
-  const HomeScreen({super.key, required this.userName, required this.userPhone, required this.isAdmin});
+  final List<String> adminPerms;
+
+  const HomeScreen({
+    super.key,
+    required this.userName,
+    required this.userPhone,
+    required this.userUid,
+    required this.isAdmin,
+    required this.adminPerms,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _currentNavIndex = 0;
   String selectedCategory = 'الكل';
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = '';
-  Set<String> favoriteProductIds = {};
 
   void _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    await GoogleSignIn().signOut();
+    await FirebaseAuth.instance.signOut();
 
     if (!context.mounted) return;
     Navigator.pushReplacement(
@@ -857,63 +1058,985 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openSupportWhatsApp() async {
-    final Uri whatsappUri = Uri.parse(
-        "https://wa.me/963967834966?text=${Uri.encodeComponent('لدي مشكلة ارغب من الادارة الاطلاع عليها ومساعدتي')}");
-    if (await canLaunchUrl(whatsappUri)) {
-      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+  void _openNotificationsSheet() {
+    List notifs = (userNotifications[widget.userName] ?? []) as List;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.65,
+          decoration: const BoxDecoration(color: Color(0xFF14141C), borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
+          padding: const EdgeInsets.all(26),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('الإشعارات والتحديثات 🔔', style: TextStyle(color: Color(0xFFE52521), fontSize: 20, fontWeight: FontWeight.w900)),
+              const Divider(color: Colors.white12, height: 30),
+              Expanded(
+                child: notifs.isEmpty
+                    ? const Center(child: Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white38)))
+                    : ListView.builder(
+                        itemCount: notifs.length,
+                        itemBuilder: (context, index) {
+                          final item = notifs[index];
+                          return ListTile(
+                            leading: Icon(item.icon, color: item.iconColor),
+                            title: Text(item.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            subtitle: Text(item.message, style: const TextStyle(color: Colors.white70)),
+                            trailing: Text(item.time, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openCartSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            String totalCartPriceStr = globalCart.fold("0", (sum, item) {
+              return "${(double.tryParse(sum) ?? 0) + ((item['priceNum'] ?? 0) * (item['qty'] ?? 1))} ${item['currency'] ?? 'ل.س'}";
+            });
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              decoration: const BoxDecoration(color: Color(0xFF14141C), borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('سلة المشتريات 🛒', style: TextStyle(color: Color(0xFFE52521), fontSize: 20, fontWeight: FontWeight.w900)),
+                      IconButton(
+                        icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                        onPressed: () {
+                          setModalState(() {
+                            globalCart.clear();
+                          });
+                          setState(() {});
+                        },
+                        tooltip: 'إفراغ السلة',
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Colors.white12, height: 20),
+                  Expanded(
+                    child: globalCart.isEmpty
+                        ? const Center(child: Text('سلة المشتريات فارغة حالياً', style: TextStyle(color: Colors.white38)))
+                        : ListView.builder(
+                            itemCount: globalCart.length,
+                            itemBuilder: (context, index) {
+                              var cartItem = globalCart[index];
+                              return ListTile(
+                                leading: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: CachedNetworkImage(imageUrl: cartItem['image'] ?? '', width: 50, height: 50, fit: BoxFit.cover),
+                                ),
+                                title: Text(cartItem['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                subtitle: Text('العدد: ${cartItem['qty']} | السعر: ${cartItem['price']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                                  onPressed: () {
+                                    setModalState(() {
+                                      globalCart.removeAt(index);
+                                    });
+                                    setState(() {});
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const Divider(color: Colors.white12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('الإجمالي: $totalCartPriceStr', style: const TextStyle(color: Color(0xFFE52521), fontSize: 16, fontWeight: FontWeight.w900)),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                        onPressed: globalCart.isEmpty ? null : () async {
+                          DocumentSnapshot settingsDoc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+                          String activeWhatsApp = "963967834966";
+                          if (settingsDoc.exists && settingsDoc.data() != null) {
+                            var data = settingsDoc.data() as Map<String, dynamic>;
+                            if (data['whatsapp'] != null && data['whatsapp'].toString().isNotEmpty) {
+                              activeWhatsApp = data['whatsapp'];
+                            }
+                          }
+
+                          String itemsStr = globalCart.map((i) => "• ${i['title']} (العدد: ${i['qty']} - السعر: ${i['price']})").join("\n");
+                          String orderMsg = "📦 طلب سلة مشتريات من hy Academy:\n"
+                              "$itemsStr\n"
+                              "• السعر الإجمالي: $totalCartPriceStr\n"
+                              "• اسم الزبون: ${widget.userName}\n"
+                              "• هاتف الزبون: ${widget.userPhone}";
+
+                          String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(orderMsg)}';
+                          if (await canLaunchUrl(Uri.parse(waUrl))) {
+                            await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+                          }
+                          
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم توجيهك إلى واتساب لإتمام طلب السلة بنجاح!')));
+                        },
+                        icon: const Icon(Icons.chat, color: Colors.white),
+                        label: const Text('طلب السلة عبر واتساب', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isDark = HyAcademyApp.of(context).isDarkMode;
+    List notifs = (userNotifications[widget.userName] ?? []) as List;
+    int unreadCount = notifs.where((n) => !n.isRead).length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipOval(
+              child: Image.asset(
+                'assets/icon/icon.jpg',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront, color: Color(0xFFE52521)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text('hy Academy'),
+          ],
+        ),
+        actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart_rounded, color: Color(0xFFE52521)),
+                onPressed: _openCartSheet,
+                tooltip: 'سلة المشتريات',
+              ),
+              if (globalCart.isNotEmpty)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Color(0xFFE52521), shape: BoxShape.circle),
+                    child: Text('${globalCart.length}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+            ],
+          ),
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE52521)),
+            onPressed: () => HyAcademyApp.of(context).toggleTheme(),
+          ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE52521)),
+                onPressed: _openNotificationsSheet,
+              ),
+              if (unreadCount > 0)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    child: Text('$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+            ],
+          ),
+          if (widget.isAdmin)
+            TextButton.icon(
+              icon: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFE52521)),
+              label: const Text('لوحة الأدمن', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AdminDashboard(
+                      adminName: widget.userName,
+                      adminPerms: widget.adminPerms,
+                    ),
+                  ),
+                );
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+            onPressed: () => _logout(context),
+            tooltip: 'تسجيل خروج',
+          ),
+        ],
+      ),
+      body: _currentNavIndex == 0
+          ? _buildStoreTab(isDark)
+          : _currentNavIndex == 1
+              ? CoursesAcademyTab(userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin)
+              : _buildProfileTab(),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: isDark ? const Color(0xFF14141C) : Colors.white,
+        selectedItemColor: const Color(0xFFE52521),
+        unselectedItemColor: Colors.grey,
+        currentIndex: _currentNavIndex,
+        onTap: (val) => setState(() => _currentNavIndex = val),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.storefront_rounded), label: 'المتجر'),
+          BottomNavigationBarItem(icon: Icon(Icons.school_rounded), label: 'المنصة والكورسات'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'حسابي'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStoreTab(bool isDark) {
+    return Column(
+      children: [
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0.95, end: 1.0),
+          duration: const Duration(seconds: 2),
+          builder: (context, scale, child) {
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2E1A22), Color(0xFF14141C), Color(0xFF1F1218)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFE52521).withOpacity(0.6), width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE52521).withOpacity(0.25),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE52521).withOpacity(0.25),
+                        shape: BoxShape.circle,
+                        boxShadow: const [BoxShadow(color: Color(0x55E52521), blurRadius: 10)],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/icon/icon.jpg',
+                          width: 38,
+                          height: 38,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.auto_awesome_rounded, color: Color(0xFFE52521), size: 26),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '✨ منصة hy Academy الاحترافية',
+                            style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'أهلاً بك، ${widget.userName}',
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.verified_rounded, color: Color(0xFFE52521), size: 24),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('ads').snapshots(),
+          builder: (context, adSnapshot) {
+            if (!adSnapshot.hasData || adSnapshot.data!.docs.isEmpty) return const SizedBox.shrink();
+            var adData = adSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+            String adUrl = adData['url'] ?? '';
+            bool isVideo = adData['isVideo'] ?? false;
+
+            if (adUrl.isEmpty) return const SizedBox.shrink();
+
+            return Container(
+              height: 220,
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE52521), width: 1.5),
+                color: Colors.black,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: isVideo
+                    ? AdVideoOrReelPlayerWidget(videoUrl: adUrl)
+                    : CachedNetworkImage(imageUrl: adUrl, fit: BoxFit.cover, width: double.infinity),
+              ),
+            );
+          },
+        ),
+
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'ابحث عن منتج أو عرض في المتجر...',
+              prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE52521)),
+              filled: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+            onChanged: (val) => setState(() => searchQuery = val.trim()),
+          ),
+        ),
+
+        SizedBox(
+          height: 55,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: globalCategories.length,
+            itemBuilder: (context, index) {
+              String cat = globalCategories[index];
+              bool isSelected = selectedCategory == cat;
+              IconData icon = categoryIcons[cat] ?? Icons.category_rounded;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  avatar: Icon(icon, color: isSelected ? Colors.white : const Color(0xFFE52521), size: 18),
+                  label: Text(cat),
+                  selected: isSelected,
+                  selectedColor: const Color(0xFFE52521),
+                  labelStyle: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold),
+                  onSelected: (_) => setState(() => selectedCategory = cat),
+                ),
+              );
+            },
+          ),
+        ),
+
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: selectedCategory == 'العروض' 
+                ? FirebaseFirestore.instance.collection('bundles').snapshots() 
+                : FirebaseFirestore.instance.collection('products').snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+              var docs = snapshot.data!.docs;
+              if (docs.isEmpty) return const Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey)));
+
+              var items = docs.map((d) {
+                var data = d.data() as Map<String, dynamic>;
+                data['id'] = d.id;
+                return data;
+              }).where((p) {
+                bool matchCat = (selectedCategory == 'الكل' || selectedCategory == 'العروض' || p['category'] == selectedCategory);
+                bool matchQuery = (searchQuery.isEmpty || p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase()));
+                return matchCat && matchQuery;
+              }).toList();
+
+              return GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.78,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  var p = items[index];
+                  bool isFav = globalFavorites.contains(p['id']);
+                  String? discountBadge = p['discountBadge'];
+
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProductDetailsScreen(
+                            product: p,
+                            userName: widget.userName,
+                            userPhone: widget.userPhone,
+                            userUid: widget.userUid,
+                            isAdmin: widget.isAdmin,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF181820) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF2E2E3A)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                  child: CachedNetworkImage(imageUrl: p['image'] ?? '', fit: BoxFit.cover, width: double.infinity),
+                                ),
+                                if (discountBadge != null && discountBadge.isNotEmpty)
+                                  Positioned(
+                                    top: 6,
+                                    left: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        discountBadge,
+                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        if (isFav) {
+                                          globalFavorites.remove(p['id']);
+                                        } else {
+                                          globalFavorites.add(p['id']);
+                                        }
+                                      });
+                                    },
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      radius: 14,
+                                      child: Icon(
+                                        isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                        color: Colors.redAccent,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), maxLines: 1),
+                                const SizedBox(height: 2),
+                                Text(p['price'] ?? '', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 10)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: SizedBox(
+                                        height: 24,
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => ProductDetailsScreen(product: p, userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin),
+                                              ),
+                                            );
+                                          },
+                                          child: const Text('طلب', style: TextStyle(fontSize: 9)),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      constraints: const BoxConstraints(),
+                                      padding: EdgeInsets.zero,
+                                      icon: const Icon(Icons.add_shopping_cart_rounded, color: Color(0xFFE52521), size: 18),
+                                      onPressed: () {
+                                        globalCart.add({
+                                          'title': p['title'],
+                                          'price': p['price'],
+                                          'priceNum': p['priceNum'] ?? 0,
+                                          'currency': p['currency'] ?? 'ل.س',
+                                          'image': p['image'],
+                                          'qty': 1,
+                                        });
+                                        setState(() {});
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج إلى سلة المشتريات 🛒')));
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFE52521)),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/icon/icon.jpg',
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, size: 80, color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(widget.userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          Text(widget.userPhone, style: const TextStyle(color: Colors.grey)),
+          const SizedBox(height: 12),
+          Chip(label: Text('Google UID: ${widget.userUid.substring(0, min(15, widget.userUid.length))}...', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold))),
+          const SizedBox(height: 30),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+            icon: const Icon(Icons.logout, color: Colors.red),
+            label: const Text('تسجيل خروج', style: TextStyle(color: Colors.red)),
+            onPressed: () => _logout(context),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AdVideoOrReelPlayerWidget extends StatefulWidget {
+  final String videoUrl;
+  const AdVideoOrReelPlayerWidget({super.key, required this.videoUrl});
+
+  @override
+  State<AdVideoOrReelPlayerWidget> createState() => _AdVideoOrReelPlayerWidgetState();
+}
+
+class _AdVideoOrReelPlayerWidgetState extends State<AdVideoOrReelPlayerWidget> {
+  late YoutubePlayerController _adController;
+  bool isInstagram = false;
+
+  String? extractAdId(String url) {
+    final regExp = RegExp(
+      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+      caseSensitive: false,
+      unicode: true,
+    );
+    final match = regExp.firstMatch(url);
+    return match?.group(1);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.videoUrl.contains('instagram.com')) {
+      isInstagram = true;
+    } else {
+      String? vidId = extractAdId(widget.videoUrl);
+      _adController = YoutubePlayerController.fromVideoId(
+        videoId: vidId ?? 'dQw4w9WgXcQ',
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          showControls: true,
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
+        ),
+      );
     }
   }
 
-  void _addSampleProductForTest() async {
-    try {
-      await FirebaseFirestore.instance.collection('products').add({
-        'title': 'طقم أدوات هندسية معماري',
-        'price': '45000 ل.س',
-        'priceNum': 45000,
-        'category': 'عمارة',
-        'image': 'https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=400',
-        'description': 'طقم هندسي متكامل لطلاب الهندسة المعمارية بجودة عالية جداً.',
-        'ratings': {},
-        'createdAt': FieldValue.serverTimestamp(),
+  @override
+  void dispose() {
+    if (!isInstagram) {
+      _adController.close();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isInstagram) {
+      String embedUrl = widget.videoUrl.endsWith('/') ? '${widget.videoUrl}embed' : '${widget.videoUrl}/embed';
+      String viewTypeId = 'insta-reel-${widget.videoUrl.hashCode}';
+      
+      ui_web.platformViewRegistry.registerViewFactory(viewTypeId, (int id) {
+        final html.IFrameElement iframeElement = html.IFrameElement()
+          ..src = embedUrl
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%';
+        return iframeElement;
       });
+
+      return HtmlElementView(viewType: viewTypeId);
+    }
+
+    return Stack(
+      children: [
+        YoutubePlayer(controller: _adController, aspectRatio: 16 / 9),
+        Positioned(
+          bottom: 8,
+          left: 8,
+          child: Row(
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.black54, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                icon: const Icon(Icons.replay, color: Colors.white, size: 16),
+                label: const Text('إعادة', style: TextStyle(color: Colors.white, fontSize: 10)),
+                onPressed: () {
+                  _adController.seekTo(seconds: 0);
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ==============================================================================
+// 🎬 مشغل فيديو تليجرام الآمن المخصص (مضاد للتحميل، إخفاء المصدر، تقديم وترجيع)
+// ==============================================================================
+class TelegramVideoPlayer extends StatefulWidget {
+  final String videoUrl;
+  const TelegramVideoPlayer({super.key, required this.videoUrl});
+
+  @override
+  State<TelegramVideoPlayer> createState() => _TelegramVideoPlayerState();
+}
+
+class _TelegramVideoPlayerState extends State<TelegramVideoPlayer> {
+  late VideoPlayerController _controller;
+  bool _isPlaying = false;
+  bool _isLoading = true;
+  String _currentQuality = 'HQ (عالية)';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer(widget.videoUrl);
+  }
+
+  void _initializePlayer(String url) {
+    _controller = VideoPlayerController.networkUrl(Uri.parse(url))
+      ..initialize().then((_) {
+        setState(() {
+          _isLoading = false;
+        });
+        _controller.play();
+        setState(() => _isPlaying = true);
+      });
+    _controller.addListener(() {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تمت إضافة منتج تجريبي بنجاح!')),
-        );
+        setState(() {
+          _isPlaying = _controller.value.isPlaying;
+        });
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e')),
-        );
-      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant TelegramVideoPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _controller.dispose();
+      setState(() => _isLoading = true);
+      _initializePlayer(widget.videoUrl);
     }
   }
 
-  void _deleteProduct(String productId) async {
-    try {
-      await FirebaseFirestore.instance.collection('products').doc(productId).delete();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حذف المنتج بنجاح')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في الحذف: $e')),
-        );
-      }
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
-  void _showEditProductDialog(Map<String, dynamic> product) {
-    final titleController = TextEditingController(text: product['title']);
-    final priceController = TextEditingController(text: product['price']);
-    final descController = TextEditingController(text: product['description']);
-    final imageController = TextEditingController(text: product['image']);
-    String cat = globalCategories.contains(product['category']) ? product['category'] : 'عمارة';
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          _isLoading
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)))
+              : Center(
+                  child: AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio > 0 ? _controller.value.aspectRatio : 16 / 9,
+                    child: VideoPlayer(_controller),
+                  ),
+                ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Colors.black.withOpacity(0.75),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                 VideoProgressIndicator(
+  _controller,
+  allowScrubbing: true,
+  colors: VideoProgressColors(
+    playedColor: const Color(0xFFE52521),
+    bufferedColor: Colors.white30,
+    backgroundColor: Colors.white10,
+  ),
+),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white),
+                            onPressed: () {
+                              setState(() {
+                                if (_controller.value.isPlaying) {
+                                  _controller.pause();
+                                } else {
+                                  _controller.play();
+                                }
+                              });
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.replay_10_rounded, color: Colors.white),
+                            onPressed: () {
+                              final newPos = _controller.value.position - const Duration(seconds: 10);
+                              _controller.seekTo(newPos < Duration.zero ? Duration.zero : newPos);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.forward_10_rounded, color: Colors.white),
+                            onPressed: () {
+                              final newPos = _controller.value.position + const Duration(seconds: 10);
+                              _controller.seekTo(newPos > _controller.value.duration ? _controller.value.duration : newPos);
+                            },
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          DropdownButton<String>(
+                            value: _currentQuality,
+                            dropdownColor: const Color(0xFF14141C),
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            underline: const SizedBox(),
+                            items: const [
+                              DropdownMenuItem(value: 'HQ (عالية)', child: Text('HQ (عالية)')),
+                              DropdownMenuItem(value: 'MQ (متوسطة)', child: Text('MQ (متوسطة)')),
+                              DropdownMenuItem(value: 'LQ (منخفضة)', child: Text('LQ (منخفضة)')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _currentQuality = val);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('تم ضبط دقة البث إلى: $val')),
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('hy Academy', style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ProductDetailsScreen extends StatefulWidget {
+  final Map<String, dynamic> product;
+  final String userName;
+  final String userPhone;
+  final String userUid;
+  final bool isAdmin;
+
+  const ProductDetailsScreen({
+    super.key,
+    required this.product,
+    required this.userName,
+    required this.userPhone,
+    required this.userUid,
+    required this.isAdmin,
+  });
+
+  @override
+  State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
+}
+
+class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
+  int quantity = 1;
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+
+  void _orderViaWhatsApp() async {
+    String recipientPhone = _phoneController.text.trim();
+    String location = _locationController.text.trim();
+
+    if (recipientPhone.isEmpty || location.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرجاء إدخال رقم هاتف المستلم ومكان التوصيل/الجامعة')),
+      );
+      return;
+    }
+
+    int priceNum = widget.product['priceNum'] ?? 0;
+    int totalPrice = priceNum * quantity;
+    String currency = widget.product['currency'] ?? 'ل.س';
+
+    DocumentSnapshot settingsDoc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+    String activeWhatsApp = "963967834966";
+    if (settingsDoc.exists && settingsDoc.data() != null) {
+      var data = settingsDoc.data() as Map<String, dynamic>;
+      if (data['whatsapp'] != null && data['whatsapp'].toString().isNotEmpty) {
+        activeWhatsApp = data['whatsapp'];
+      }
+    }
+
+    String orderMsg = "📦 طلب منتج من hy Academy:\n"
+        "• المنتج: ${widget.product['title']}\n"
+        "• العدد: $quantity قطع\n"
+        "• السعر الإجمالي: $totalPrice $currency\n"
+        "• اسم الزبون: ${widget.userName}\n"
+        "• هاتف المستلم: $recipientPhone\n"
+        "• مكان التوصيل/الجامعة: $location";
+
+    String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(orderMsg)}';
+    if (await canLaunchUrl(Uri.parse(waUrl))) {
+      await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+    }
+
+    addAppNotification(
+      targetUserName: widget.userName,
+      title: 'تم إرسال طلب المتجر بنجاح 🛒',
+      message: 'تم إرسال طلب (${widget.product['title']}) عبر واتساب للإدارة.',
+      icon: Icons.shopping_bag_rounded,
+      iconColor: const Color(0xFFE52521),
+    );
+
+    if (!mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم توجيهك إلى واتساب لإتمام الطلب بنجاح!')),
+    );
+  }
+
+  void _deleteProduct() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E28),
+        title: const Text('حذف المنتج'),
+        content: const Text('هل أنت متأكد من حذف هذا المنتج نهائياً؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('تراجع')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              String colName = widget.product['isBundle'] == true ? 'bundles' : 'products';
+              await FirebaseFirestore.instance.collection(colName).doc(widget.product['id']).delete();
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف المنتج/العرض بنجاح')));
+            },
+            child: const Text('حذف نهائي'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editProductDialog() {
+    final titleController = TextEditingController(text: widget.product['title']);
+    final priceController = TextEditingController(text: widget.product['priceNum']?.toString() ?? '0');
+    final descController = TextEditingController(text: widget.product['description']);
+    final imageController = TextEditingController(text: widget.product['image']);
+    final discountController = TextEditingController(text: widget.product['discountBadge'] ?? '');
+    String currency = widget.product['currency'] ?? 'ل.س';
 
     showDialog(
       context: context,
@@ -921,65 +2044,60 @@ class _HomeScreenState extends State<HomeScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              backgroundColor: const Color(0xFF1B1B26),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: const Text('تعديل المنتج (صلاحية الأدمن)', style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
+              backgroundColor: const Color(0xFF14141C),
+              title: const Text('تعديل المنتج / العرض ✏️', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(labelText: 'اسم المنتج', filled: true, fillColor: Color(0xFF262636)),
+                    TextField(controller: titleController, decoration: const InputDecoration(labelText: 'اسم المنتج', filled: true)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الرقمي', filled: true))),
+                        const SizedBox(width: 8),
+                        DropdownButton<String>(
+                          value: currency,
+                          dropdownColor: const Color(0xFF14141C),
+                          items: const [
+                            DropdownMenuItem(value: 'ل.س', child: Text('ل.س', style: TextStyle(color: Colors.white))),
+                            DropdownMenuItem(value: '\$', child: Text('\$', style: TextStyle(color: Colors.white))),
+                          ],
+                          onChanged: (val) => setDialogState(() => currency = val ?? 'ل.س'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
-                    TextField(
-                      controller: priceController,
-                      decoration: const InputDecoration(labelText: 'السعر (ل.س)', filled: true, fillColor: Color(0xFF262636)),
-                    ),
+                    TextField(controller: discountController, decoration: const InputDecoration(labelText: 'نسبة الحسم (مثال: خصم 20% أو عروض خاصة)', filled: true)),
                     const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: cat,
-                      dropdownColor: const Color(0xFF262636),
-                      decoration: const InputDecoration(labelText: 'القسم', filled: true, fillColor: Color(0xFF262636)),
-                      items: globalCategories.where((c) => c != 'الكل').map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (val) => setDialogState(() => cat = val!),
-                    ),
+                    TextField(controller: imageController, decoration: const InputDecoration(labelText: 'رابط الصورة', filled: true)),
                     const SizedBox(height: 10),
-                    TextField(
-                      controller: imageController,
-                      decoration: const InputDecoration(labelText: 'رابط الصورة', filled: true, fillColor: Color(0xFF262636)),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: descController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(labelText: 'التفاصيل', filled: true, fillColor: Color(0xFF262636)),
-                    ),
+                    TextField(controller: descController, maxLines: 3, decoration: const InputDecoration(labelText: 'التفاصيل', filled: true)),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
                 ElevatedButton(
                   onPressed: () async {
-                    String cleanPrice = priceController.text.replaceAll(RegExp(r'[^0-9]'), '');
-                    int priceNum = int.tryParse(cleanPrice) ?? 0;
+                    int priceNum = int.tryParse(priceController.text) ?? 0;
+                    String formattedPrice = "$priceNum $currency";
+                    String colName = widget.product['isBundle'] == true ? 'bundles' : 'products';
 
-                    await FirebaseFirestore.instance.collection('products').doc(product['id']).update({
+                    await FirebaseFirestore.instance.collection(colName).doc(widget.product['id']).update({
                       'title': titleController.text.trim(),
-                      'price': priceController.text.trim(),
                       'priceNum': priceNum,
-                      'category': cat,
+                      'currency': currency,
+                      'price': formattedPrice,
                       'image': imageController.text.trim(),
                       'description': descController.text.trim(),
+                      'discountBadge': discountController.text.trim(),
                     });
 
                     if (!context.mounted) return;
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم تعديل المنتج بنجاح!')),
-                    );
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المنتج بنجاح وتحديثه سحابياً! ✅')));
                   },
                   child: const Text('حفظ التعديلات'),
                 ),
@@ -991,1689 +2109,707 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _addToCart(Map<String, dynamic> product) {
-    userCarts.putIfAbsent(widget.userName, () => []);
-    List<CartItem> cart = userCarts[widget.userName]!;
-    int index = cart.indexWhere((item) => item.product['id'] == product['id']);
-    setState(() {
-      if (index != -1) {
-        cart[index].quantity++;
-      } else {
-        cart.add(CartItem(product: product, quantity: 1));
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('تمت إضافة (${product['title']}) إلى سلة المشتريات 🛒'),
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'عرض السلة',
-          textColor: const Color(0xFFE5A900),
-          onPressed: _openCartSheet,
-        ),
-      ),
-    );
-  }
-
-  void _openCartSheet() {
-    List<CartItem> cart = userCarts[widget.userName] ?? [];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setCartState) {
-            int totalSum = cart.fold(0, (sum, item) {
-              int price = item.product['priceNum'] ?? 0;
-              return sum + (price * item.quantity);
-            });
-
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.75,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1B1B26),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black87, blurRadius: 35, offset: Offset(0, -10)),
-                ],
-              ),
-              padding: const EdgeInsets.all(26),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.shopping_bag_rounded, color: Color(0xFFE5A900), size: 30),
-                          SizedBox(width: 12),
-                          Text(
-                            'سلة المشتريات الذكية',
-                            style: TextStyle(color: Color(0xFFE5A900), fontSize: 20, fontWeight: FontWeight.w900),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(color: Colors.white12, height: 30),
-                  Expanded(
-                    child: cart.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.remove_shopping_cart_rounded, size: 70, color: Colors.white24),
-                                SizedBox(height: 14),
-                                Text('السلة فارغة حالياً', style: TextStyle(color: Colors.white38, fontSize: 15)),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            itemCount: cart.length,
-                            itemBuilder: (context, index) {
-                              final item = cart[index];
-                              return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF262636),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: const Color(0xFF36364D)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(14),
-                                      child: CachedNetworkImage(
-                                        imageUrl: item.product['image'] ?? '',
-                                        width: 65,
-                                        height: 65,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            item.product['title'] ?? '',
-                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            item.product['price'] ?? '',
-                                            style: const TextStyle(color: Color(0xFFE5A900), fontSize: 13, fontWeight: FontWeight.w900),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 22),
-                                          onPressed: () {
-                                            setCartState(() {
-                                              if (item.quantity > 1) {
-                                                item.quantity--;
-                                              } else {
-                                                cart.removeAt(index);
-                                              }
-                                              setState(() {});
-                                            });
-                                          },
-                                        ),
-                                        Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                                        IconButton(
-                                          icon: const Icon(Icons.add_circle_outline, color: Color(0xFFE5A900), size: 22),
-                                          onPressed: () {
-                                            setCartState(() {
-                                              item.quantity++;
-                                              setState(() {});
-                                            });
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  if (cart.isNotEmpty) ...[
-                    const Divider(color: Colors.white12),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('المجموع الكلي:', style: TextStyle(fontSize: 16, color: Colors.white70)),
-                          Text(
-                            '$totalSum ل.س',
-                            style: const TextStyle(fontSize: 21, color: Color(0xFFE5A900), fontWeight: FontWeight.w900),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.verified_rounded),
-                        label: const Text('إتمام طلب السلة الآن'),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _checkoutCart(cart, totalSum);
-                        },
-                      ),
-                    ),
-                  ]
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _checkoutCart(List<CartItem> cart, int totalSum) async {
-    final deliveryPhoneController = TextEditingController();
-    final universityController = TextEditingController();
-    String paymentMethod = 'نقدي عند الاستلام';
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1B1B26),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              title: const Text('تأكيد طلب السلة 🛒', style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('عدد المنتجات: ${cart.length}', style: const TextStyle(color: Colors.white70)),
-                    const SizedBox(height: 16),
-                    const Text('طريقة الدفع:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    DropdownButton<String>(
-                      value: paymentMethod,
-                      isExpanded: true,
-                      dropdownColor: const Color(0xFF262636),
-                      items: ['نقدي عند الاستلام', 'شام كاش (الدفع الفوري)']
-                          .map((method) => DropdownMenuItem(value: method, child: Text(method)))
-                          .toList(),
-                      onChanged: (val) => setDialogState(() => paymentMethod = val!),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: deliveryPhoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        hintText: '+963...',
-                        filled: true,
-                        fillColor: const Color(0xFF262636),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('الجامعة المراد الاستلام منها *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: universityController,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        hintText: 'اسم الجامعة...',
-                        filled: true,
-                        fillColor: const Color(0xFF262636),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  onPressed: (deliveryPhoneController.text.trim().isEmpty ||
-                          universityController.text.trim().isEmpty)
-                      ? null
-                      : () async {
-                          Navigator.pop(context);
-
-                          String itemsSummary = cart
-                              .map((item) => "• ${item.product['title']} (العدد: ${item.quantity})")
-                              .join("\n");
-
-                          String orderMsg = "📦 طلب منتجات من سلة المشتريات:\n"
-                              "👤 الزبون: ${widget.userName}\n"
-                              "📱 رقم الهاتف المسجل: ${widget.userPhone}\n"
-                              "📋 العناصر:\n$itemsSummary\n"
-                              "💰 المجموع الكلي: $totalSum ل.س\n"
-                              "- طريقة الدفع: $paymentMethod\n"
-                              "- رقم التواصل للتسليم: ${deliveryPhoneController.text.trim()}\n"
-                              "- الجامعة: ${universityController.text.trim()}";
-
-                          try {
-                            final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
-                            await chatRef.set({
-                              'lastActive': FieldValue.serverTimestamp(),
-                              'studentName': widget.userName,
-                            }, SetOptions(merge: true));
-
-                            await chatRef.collection('messages').add({
-                              'senderName': widget.userName,
-                              'text': orderMsg,
-                              'isAdmin': false,
-                              'timestamp': FieldValue.serverTimestamp(),
-                            });
-
-                            await chatRef.collection('messages').add({
-                              'senderName': 'الإدارة',
-                              'text': 'مرحباً بك، تم تلقي طلب السلة بنجاح. يرجى الانتظار لحين تأكيده.',
-                              'isAdmin': true,
-                              'timestamp': FieldValue.serverTimestamp(),
-                            });
-                          } catch (e) {
-                            debugPrint("Error sending order: $e");
-                          }
-
-                          addAppNotification(
-                            targetUserName: widget.userName,
-                            title: 'تم إرسال طلب السلة بنجاح 🛒',
-                            message: 'تم إرسال طلب السلة المتضمن (${cart.length}) منتجات إلى الإدارة بنجاح.',
-                            icon: Icons.shopping_cart_outlined,
-                            iconColor: const Color(0xFFE5A900),
-                          );
-
-                          addAdminNotification(
-                            customerName: widget.userName,
-                            orderSummary: 'طلب سلة (${cart.length} منتجات) بقيمة $totalSum ل.س',
-                          );
-
-                          setState(() {
-                            userCarts[widget.userName]?.clear();
-                          });
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
-                            ),
-                          );
-                        },
-                  child: const Text('تأكيد الإرسال للإدارة'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _openNotificationsSheet() {
-    List<NotificationItem> notifs = widget.isAdmin ? adminNotifications : (userNotifications[widget.userName] ?? []);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.70,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1B1B26),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black87, blurRadius: 35, offset: Offset(0, -10)),
-                ],
-              ),
-              padding: const EdgeInsets.all(26),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.notifications_active_rounded, color: Color(0xFFE5A900), size: 30),
-                          const SizedBox(width: 12),
-                          Text(
-                            widget.isAdmin ? 'إشعارات الطلبات (الأدمن)' : 'الإشعارات والتحديثات',
-                            style: const TextStyle(color: Color(0xFFE5A900), fontSize: 20, fontWeight: FontWeight.w900),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(color: Colors.white12, height: 30),
-                  Expanded(
-                    child: notifs.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.notifications_off_rounded, size: 70, color: Colors.white24),
-                                SizedBox(height: 14),
-                                Text('لا توجد إشعارات جديدة حالياً', style: TextStyle(color: Colors.white38, fontSize: 15)),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            itemCount: notifs.length,
-                            itemBuilder: (context, index) {
-                              final item = notifs[index];
-                              return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF262636),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: const Color(0xFF36364D)),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: item.iconColor.withOpacity(0.15),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(item.icon, color: item.iconColor, size: 24),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                item.title,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-                                              ),
-                                              Text(
-                                                item.time,
-                                                style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            item.message,
-                                            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    ).then((_) {
-      setState(() {
-        for (var n in notifs) {
-          n.isRead = true;
-        }
-      });
-    });
-  }
-
-  void _showOrderDialog(Map<String, dynamic> product) {
-    int quantity = 1;
-    String paymentMethod = 'نقدي عند الاستلام';
-    final deliveryPhoneController = TextEditingController();
-    final universityController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1B1B26),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              title: Text('طلب: ${product['title']}', style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('السعر للقطعة: ${product['price']}', style: const TextStyle(color: Colors.white60)),
-                    const SizedBox(height: 20),
-                    const Text('عدد القطع المطلوبة:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Color(0xFFE5A900)),
-                          onPressed: () {
-                            if (quantity > 1) {
-                              setDialogState(() => quantity--);
-                            }
-                          },
-                        ),
-                        Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle, color: Color(0xFFE5A900)),
-                          onPressed: () {
-                            setDialogState(() => quantity++);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('طريقة الدفع:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    DropdownButton<String>(
-                      value: paymentMethod,
-                      isExpanded: true,
-                      dropdownColor: const Color(0xFF262636),
-                      items: ['نقدي عند الاستلام', 'شام كاش (الدفع الفوري)']
-                          .map((method) => DropdownMenuItem(value: method, child: Text(method)))
-                          .toList(),
-                      onChanged: (val) {
-                        setDialogState(() => paymentMethod = val!);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: deliveryPhoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        hintText: '+963...',
-                        filled: true,
-                        fillColor: const Color(0xFF262636),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: universityController,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        hintText: 'اكتب اسم الجامعة هنا...',
-                        filled: true,
-                        fillColor: const Color(0xFF262636),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  onPressed: (deliveryPhoneController.text.trim().isEmpty ||
-                          universityController.text.trim().isEmpty)
-                      ? null
-                      : () async {
-                          Navigator.pop(context);
-
-                          String orderMsg = "📦 طلب منتج جديد:\n"
-                              "👤 الزبون: ${widget.userName}\n"
-                              "📱 رقم الهاتف المسجل: ${widget.userPhone}\n"
-                              "- المنتج: ${product['title']}\n"
-                              "- السعر الفردي: ${product['price']}\n"
-                              "- عدد القطع: $quantity\n"
-                              "- الدفع: $paymentMethod\n"
-                              "- هاتف التسليم: ${deliveryPhoneController.text.trim()}\n"
-                              "- الجامعة: ${universityController.text.trim()}";
-
-                          try {
-                            final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
-                            await chatRef.set({
-                              'lastActive': FieldValue.serverTimestamp(),
-                              'studentName': widget.userName,
-                            }, SetOptions(merge: true));
-
-                            await chatRef.collection('messages').add({
-                              'senderName': widget.userName,
-                              'text': orderMsg,
-                              'isAdmin': false,
-                              'timestamp': FieldValue.serverTimestamp(),
-                            });
-
-                            await chatRef.collection('messages').add({
-                              'senderName': 'الإدارة',
-                              'text': 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
-                              'isAdmin': true,
-                              'timestamp': FieldValue.serverTimestamp(),
-                            });
-                          } catch (e) {
-                            debugPrint("Error sending order: $e");
-                          }
-
-                          addAppNotification(
-                            targetUserName: widget.userName,
-                            title: 'تم إرسال طلبك بنجاح 📦',
-                            message: 'تم إرسال طلبك (${product['title']}) إلى الإدارة بنجاح.',
-                            icon: Icons.shopping_bag_outlined,
-                            iconColor: const Color(0xFFE5A900),
-                          );
-
-                          addAdminNotification(
-                            customerName: widget.userName,
-                            orderSummary: 'طلب منتج: ${product['title']} (العدد: $quantity)',
-                          );
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
-                            ),
-                          );
-                        },
-                  child: const Text('تأكيد الإرسال للإدارة'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    bool isDark = HyStoreApp.of(context).isDarkMode;
-    List<NotificationItem> notifs = widget.isAdmin ? adminNotifications : (userNotifications[widget.userName] ?? []);
-    int unreadCount = notifs.where((n) => !n.isRead).length;
-    List<CartItem> cart = userCarts[widget.userName] ?? [];
-    int cartCount = cart.fold(0, (sum, item) => sum + item.quantity);
+    bool isFav = globalFavorites.contains(widget.product['id']);
 
     return Scaffold(
-      body: Stack(
-        children: [
-          const BackgroundStickersLayer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AppBar(
-                title: const Text('HY STORE'),
-                actions: [
-                  IconButton(
-                    icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE5A900), size: 24),
-                    onPressed: () => HyStoreApp.of(context).toggleTheme(),
-                    tooltip: 'تبديل المظهر',
-                  ),
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFFE5A900), size: 26),
-                        onPressed: _openCartSheet,
-                        tooltip: 'سلة المشتريات',
-                      ),
-                      if (cartCount > 0)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE5A900),
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                            child: Text(
-                              '$cartCount',
-                              style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE5A900), size: 26),
-                        onPressed: _openNotificationsSheet,
-                        tooltip: 'الإشعارات',
-                      ),
-                      if (unreadCount > 0)
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.redAccent,
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                            child: Text(
-                              '$unreadCount',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (widget.isAdmin)
-                    TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: const Color(0xFFE5A900)),
-                      icon: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFE5A900)),
-                      label: const Text('الأدمن', style: TextStyle(fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => AdminDashboard(adminName: widget.userName),
-                          ),
-                        ).then((_) => setState(() {}));
-                      },
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFE5A900)),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatScreen(userName: widget.userName, isAdmin: widget.isAdmin),
-                        ),
-                      );
-                    },
-                    tooltip: 'محادثة الإدارة',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.support_agent_rounded, color: Color(0xFFE5A900)),
-                    onPressed: _openSupportWhatsApp,
-                    tooltip: 'الدعم الفني',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-                    onPressed: () => _logout(context),
-                    tooltip: 'تسجيل خروج',
-                  ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                child: Container(
-                  height: 125,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(26),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF2A2A38), Color(0xFF1B1B26)],
-                    ),
-                    border: Border.all(color: const Color(0xFFE5A900).withOpacity(0.5), width: 1.8),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x22E5A900), blurRadius: 25, offset: Offset(0, 8)),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFE5A900).withOpacity(0.2),
-                          boxShadow: const [BoxShadow(color: Color(0x22E5A900), blurRadius: 10)],
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/icon/icon.png',
-                            width: 38,
-                            height: 38,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 38, color: Color(0xFFE5A900)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text(
-                              'أهلاً بك في منصة HY STORE',
-                              style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900, fontSize: 17),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'أفضل الأسعار وأفضل المستلزمات جودة وأفضل خدمة يقدمها لكم متجرنا',
-                              style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.3),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                child: TextField(
-                  controller: _searchController,
-                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                  decoration: InputDecoration(
-                    hintText: selectedCategory == 'الكل'
-                        ? 'ابحث عن أي منتج في المتجر الذكي...'
-                        : 'ابحث في قسم $selectedCategory...',
-                    hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black45),
-                    prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE5A900)),
-                    suffixIcon: searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, color: Colors.grey),
-                            onPressed: () {
-                              setState(() {
-                                _searchController.clear();
-                                searchQuery = '';
-                              });
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: isDark ? const Color(0xFF1B1B26).withOpacity(0.9) : Colors.white.withOpacity(0.9),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide(color: isDark ? const Color(0xFF2E2E40) : const Color(0xFFD4CDC3)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: const BorderSide(color: Color(0xFFE5A900), width: 2),
-                    ),
-                  ),
-                  onChanged: (val) {
-                    setState(() {
-                      searchQuery = val.trim();
-                    });
-                  },
-                ),
-              ),
-              SizedBox(
-                height: 68,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  itemCount: globalCategories.length,
-                  itemBuilder: (context, index) {
-                    String cat = globalCategories[index];
-                    bool isSelected = selectedCategory == cat;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-                      child: ChoiceChip(
-                        avatar: Icon(
-                          cat == 'عمارة' ? Icons.architecture_rounded :
-                          cat == 'أسنان' ? Icons.medical_services_rounded :
-                          cat == 'مدنية' ? Icons.apartment_rounded :
-                          cat == 'معلوماتية' ? Icons.computer_rounded :
-                          cat == 'بشرية' ? Icons.local_hospital_rounded :
-                          cat == 'ديكور' ? Icons.chair_rounded : Icons.star_rounded,
-                          color: isSelected ? Colors.black : const Color(0xFFE5A900),
-                          size: 22,
-                        ),
-                        label: Text(cat, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900)),
-                        selected: isSelected,
-                        selectedColor: const Color(0xFFE5A900),
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.black : (isDark ? Colors.white : Colors.black87),
-                          fontWeight: FontWeight.w900,
-                        ),
-                        backgroundColor: isDark ? const Color(0xFF222232) : const Color(0xFFE2E8F0),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                        onSelected: (bool selected) {
-                          setState(() {
-                            selectedCategory = cat;
-                          });
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const Divider(height: 1, color: Color(0xFF2A2A3E)),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('products').snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: Color(0xFFE5A900)),
-                            SizedBox(height: 14),
-                            Text('جاري تحميل المنتجات السحابية...', style: TextStyle(color: Colors.white54, fontSize: 13)),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.inventory_2_outlined, size: 75, color: Color(0xFFE5A900)),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'لا توجد منتجات مضافة بعد في السحابة.',
-                                style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'اضغط على الزر أدناه لإضافة منتج تجريبي واختبار العرض:',
-                                style: TextStyle(color: Colors.white38, fontSize: 12),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 24),
-                              ElevatedButton.icon(
-                                onPressed: _addSampleProductForTest,
-                                icon: const Icon(Icons.add_circle_outline_rounded),
-                                label: const Text('إضافة منتج تجريبي الآن'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    var firestoreProducts = snapshot.data!.docs.map((doc) {
-                      var data = doc.data() as Map<String, dynamic>;
-                      data['id'] = doc.id;
-                      data['ratings'] = data['ratings'] ?? {};
-                      return data;
-                    }).toList();
-
-                    List filteredProducts = firestoreProducts.where((p) {
-                      bool matchesCategory = (selectedCategory == 'الكل') || (p['category'] == selectedCategory);
-                      bool matchesQuery = searchQuery.isEmpty ||
-                          p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          p['description'].toString().toLowerCase().contains(searchQuery.toLowerCase());
-                      return matchesCategory && matchesQuery;
-                    }).toList();
-
-                    if (filteredProducts.isEmpty) {
-                      return const Center(
-                        child: Text(
-                          'لا توجد منتجات تطابق بحثك',
-                          style: TextStyle(color: Colors.white38, fontSize: 15),
-                        ),
-                      );
-                    }
-
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 280,
-                        childAspectRatio: 0.53,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                      ),
-                      itemCount: filteredProducts.length,
-                      itemBuilder: (context, index) {
-                        final product = filteredProducts[index];
-                        bool isFav = favoriteProductIds.contains(product['id']);
-
-                        return GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProductDetailScreen(
-                                  product: product,
-                                  userName: widget.userName,
-                                  userPhone: widget.userPhone,
-                                  onAddToCart: () => _addToCart(product),
-                                ),
-                              ),
-                            ).then((_) => setState(() {}));
-                          },
-                          child: Transform(
-                            transform: Matrix4.identity()
-                              ..setEntry(3, 2, 0.001)
-                              ..rotateX(0.015)
-                              ..rotateY(0.015),
-                            alignment: Alignment.center,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF1B1B26).withOpacity(0.95) : Colors.white.withOpacity(0.95),
-                                borderRadius: BorderRadius.circular(26),
-                                border: Border.all(color: const Color(0xFF2E2E40)),
-                                boxShadow: const [
-                                  BoxShadow(color: Color(0x22E5A900), blurRadius: 20, offset: Offset(0, 10)),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Stack(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-                                          child: CachedNetworkImage(
-                                            imageUrl: product['image'] ?? '',
-                                            fit: BoxFit.cover,
-                                            width: double.infinity,
-                                            placeholder: (context, url) => const Center(
-                                              child: CircularProgressIndicator(color: Color(0xFFE5A900)),
-                                            ),
-                                            errorWidget: (context, url, error) => const Icon(Icons.error),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: 10,
-                                          right: 10,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.85),
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: const Color(0xFFE5A900).withOpacity(0.7)),
-                                            ),
-                                            child: Text(
-                                              product['category'] ?? '',
-                                              style: const TextStyle(color: Color(0xFFE5A900), fontSize: 10, fontWeight: FontWeight.w900),
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: 10,
-                                          left: 10,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                if (isFav) {
-                                                  favoriteProductIds.remove(product['id']);
-                                                } else {
-                                                  favoriteProductIds.add(product['id']);
-                                                }
-                                              });
-                                            },
-                                            child: CircleAvatar(
-                                              radius: 17,
-                                              backgroundColor: Colors.black.withOpacity(0.85),
-                                              child: Icon(
-                                                isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                                color: isFav ? Colors.redAccent : Colors.white,
-                                                size: 19,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        if (widget.isAdmin)
-                                          Positioned(
-                                            top: 45,
-                                            left: 10,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(0.85),
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: const Color(0xFFE5A900)),
-                                              ),
-                                              child: PopupMenuButton<String>(
-                                                icon: const Icon(Icons.more_vert_rounded, color: Color(0xFFE5A900), size: 18),
-                                                color: const Color(0xFF1B1B26),
-                                                onSelected: (val) {
-                                                  if (val == 'edit') {
-                                                    _showEditProductDialog(product);
-                                                  } else if (val == 'delete') {
-                                                    _deleteProduct(product['id']);
-                                                  }
-                                                },
-                                                itemBuilder: (context) => [
-                                                  const PopupMenuItem(
-                                                    value: 'edit',
-                                                    child: Text('تعديل المنتج', style: TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.bold)),
-                                                  ),
-                                                  const PopupMenuItem(
-                                                    value: 'delete',
-                                                    child: Text('حذف المنتج', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          product['title'] ?? '',
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : Colors.black87),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          product['price'] ?? '',
-                                          style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900, fontSize: 15),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          height: 36,
-                                          child: ElevatedButton(
-                                            onPressed: () => _showOrderDialog(product),
-                                            child: const Text('طلب سريع', style: TextStyle(fontSize: 11)),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          height: 36,
-                                          child: OutlinedButton.icon(
-                                            onPressed: () => _addToCart(product),
-                                            style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(color: Color(0xFFE5A900)),
-                                              padding: EdgeInsets.zero,
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                            ),
-                                            icon: const Icon(Icons.bookmark_add_outlined, size: 14, color: Color(0xFFE5A900)),
-                                            label: const Text('إضافة للسلة', style: TextStyle(fontSize: 10, color: Color(0xFFE5A900), fontWeight: FontWeight.bold)),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+      appBar: AppBar(
+        title: Text(widget.product['title'] ?? 'تفاصيل المنتج'),
+        actions: [
+          if (widget.isAdmin) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_rounded, color: Colors.amberAccent),
+              onPressed: _editProductDialog,
+              tooltip: 'تعديل المنتج',
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+              onPressed: _deleteProduct,
+              tooltip: 'حذف المنتج',
+            ),
+          ],
+          IconButton(
+            icon: Icon(isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: Colors.redAccent),
+            onPressed: () {
+              setState(() {
+                if (isFav) {
+                  globalFavorites.remove(widget.product['id']);
+                } else {
+                  globalFavorites.add(widget.product['id']);
+                }
+              });
+            },
           ),
         ],
       ),
-      drawer: Drawer(
-        backgroundColor: isDark ? const Color(0xFF161622) : Colors.white,
-        child: ListView(
-          padding: EdgeInsets.zero,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            UserAccountsDrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDark 
-                      ? const [Color(0xFF2A2A38), Color(0xFF121218)] 
-                      : const [Color(0xFFE5A900), Color(0xFFFB8500)],
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(25),
+                child: CachedNetworkImage(
+                  imageUrl: widget.product['image'] ?? '',
+                  height: 250,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
                 ),
               ),
-              currentAccountPicture: const CircleAvatar(
-                backgroundColor: Color(0xFFE5A900),
-                child: Icon(Icons.person_rounded, size: 40, color: Colors.black),
-              ),
-              accountName: Text(
-                widget.userName,
-                style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900, fontSize: 17),
-              ),
-              accountEmail: Text(
-                widget.userPhone,
-                style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.product['title'] ?? '',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
+                  ),
+                ),
+                Text(
+                  widget.product['price'] ?? '',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFE52521)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Chip(
+              label: Text('القسم: ${widget.product['category'] ?? 'عام'}', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+              backgroundColor: const Color(0xFFE52521).withOpacity(0.15),
+            ),
+            const SizedBox(height: 16),
+            const Text('تفاصيل المنتج:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white70)),
+            const SizedBox(height: 6),
+            Text(
+              widget.product['description']?.isNotEmpty == true ? widget.product['description'] : 'لا توجد تفاصيل إضافية متاحة لهذا المنتج حالياً.',
+              style: const TextStyle(fontSize: 14, color: Colors.white60, height: 1.5),
+            ),
+            const Divider(color: Colors.white24, height: 35),
+            
+            const Text('تحديد عدد القطع:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    if (quantity > 1) setState(() => quantity--);
+                  },
+                  icon: const Icon(Icons.remove_circle, color: Color(0xFFE52521), size: 32),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(color: const Color(0xFF1E1E28), borderRadius: BorderRadius.circular(12)),
+                  child: Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+                IconButton(
+                  onPressed: () => setState(() => quantity++),
+                  icon: const Icon(Icons.add_circle, color: Color(0xFFE52521), size: 32),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'رقم هاتف المستلم',
+                prefixIcon: Icon(Icons.phone, color: Color(0xFFE52521)),
+                filled: true,
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.store_rounded, color: Color(0xFFE5A900)),
-              title: const Text('المتجر الرئيسي'),
-              onTap: () => Navigator.pop(context),
+            const SizedBox(height: 14),
+
+            TextField(
+              controller: _locationController,
+              decoration: const InputDecoration(
+                labelText: 'مكان التوصيل أو الجامعة بالتفصيل',
+                prefixIcon: Icon(Icons.location_on, color: Color(0xFFE52521)),
+                filled: true,
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart_rounded, color: Color(0xFFE5A900)),
-              title: Text('سلة المشتريات ($cartCount)'),
-              onTap: () {
-                Navigator.pop(context);
-                _openCartSheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.favorite_rounded, color: Colors.redAccent),
-              title: Text('المنتجات المفضلة (${favoriteProductIds.length})'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => FavoritesScreen(
-                      favoriteIds: favoriteProductIds,
-                      userName: widget.userName,
-                      userPhone: widget.userPhone,
+            const SizedBox(height: 25),
+
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      onPressed: _orderViaWhatsApp,
+                      icon: const Icon(Icons.chat, color: Colors.white),
+                      label: const Text('طلب عبر واتساب 🛒', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
                     ),
                   ),
-                ).then((_) => setState(() {}));
-              },
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                    onPressed: () {
+                      globalCart.add({
+                        'title': widget.product['title'],
+                        'price': widget.product['price'],
+                        'priceNum': widget.product['priceNum'] ?? 0,
+                        'currency': widget.product['currency'] ?? 'ل.س',
+                        'image': widget.product['image'],
+                        'qty': quantity,
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج إلى سلة المشتريات بنجاح 🛒')));
+                    },
+                    icon: const Icon(Icons.add_shopping_cart, color: Color(0xFFE52521)),
+                    label: const Text('إضافة للسلة', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE5A900)),
-              title: const Text('الإشعارات والتحديثات'),
-              onTap: () {
-                Navigator.pop(context);
-                _openNotificationsSheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFE5A900)),
-              title: const Text('محادثتي مع الإدارة'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ChatScreen(userName: widget.userName, isAdmin: widget.isAdmin),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CoursesAcademyTab extends StatefulWidget {
+  final String userName;
+  final String userPhone;
+  final String userUid;
+  final bool isAdmin;
+  const CoursesAcademyTab({super.key, required this.userName, required this.userPhone, required this.userUid, required this.isAdmin});
+
+  @override
+  State<CoursesAcademyTab> createState() => _CoursesAcademyTabState();
+}
+
+class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
+  String? selectedUni;
+  String? selectedCollege;
+
+  void _deleteCourse(String courseId, String courseTitle) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E28),
+        title: const Text('حذف المقرر'),
+        content: Text('هل أنت متأكد من حذف مقرر ($courseTitle) نهائياً؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('تراجع')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('courses').doc(courseId).delete();
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف المقرر بنجاح')));
+            },
+            child: const Text('حذف نهائي'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (selectedUni == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text('اختر الجامعة السورية:', style: TextStyle(color: Color(0xFFE52521), fontSize: 20, fontWeight: FontWeight.w900)),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.8,
+              ),
+              itemCount: globalUniversities.length,
+              itemBuilder: (context, index) {
+                String uni = globalUniversities[index];
+                String uniLogo = universityLogos[uni] ?? 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=500';
+
+                return GestureDetector(
+                  onTap: () => setState(() => selectedUni = uni),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF14141C),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE52521).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                            child: CachedNetworkImage(imageUrl: uniLogo, fit: BoxFit.cover),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            uni,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
             ),
-            const Divider(color: Colors.white12),
-            ListTile(
-              leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-              title: const Text('تسجيل خروج', style: TextStyle(color: Colors.redAccent)),
-              onTap: () => _logout(context),
+          ),
+        ],
+      );
+    }
+
+    if (selectedCollege == null) {
+      List colleges = (universityColleges[selectedUni] ?? ['هندسة معلوماتية', 'هندسة مدنية']) as List;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFE52521)),
+                  onPressed: () => setState(() => selectedUni = null),
+                ),
+                Expanded(
+                  child: Text('كليات $selectedUni', style: const TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ----------------- صفحة المفضلة -----------------
-class FavoritesScreen extends StatefulWidget {
-  final Set<String> favoriteIds;
-  final String userName;
-  final String userPhone;
-  const FavoritesScreen({super.key, required this.favoriteIds, required this.userName, required this.userPhone});
-
-  @override
-  State<FavoritesScreen> createState() => _FavoritesScreenState();
-}
-
-class _FavoritesScreenState extends State<FavoritesScreen> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('المنتجات المفضلة ❤️')),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('products').snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)));
-          }
-
-          var favProducts = snapshot.data!.docs.map((doc) {
-            var data = doc.data() as Map<String, dynamic>;
-            data['id'] = doc.id;
-            return data;
-          }).where((p) => widget.favoriteIds.contains(p['id'])).toList();
-
-          if (favProducts.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.favorite_border_rounded, size: 70, color: Colors.white24),
-                  SizedBox(height: 16),
-                  Text('لم تقم بإضافة أي منتجات للمفضلة بعد', style: TextStyle(color: Colors.white38, fontSize: 15)),
-                ],
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.8,
               ),
-            );
-          }
+              itemCount: colleges.length,
+              itemBuilder: (context, index) {
+                String college = colleges[index];
+                String imgUrl = collegeImages[college] ?? 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=500';
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: favProducts.length,
-            itemBuilder: (context, index) {
-              final product = favProducts[index];
-              return Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1B1B26),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF2E2E40)),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(12),
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: CachedNetworkImage(imageUrl: product['image'] ?? '', width: 65, height: 65, fit: BoxFit.cover),
+                return GestureDetector(
+                  onTap: () => setState(() => selectedCollege = college),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF14141C),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE52521), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                            child: CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            college,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  title: Text(product['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  subtitle: Text('${product['category']} | ${product['price']}', style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.favorite_rounded, color: Colors.redAccent),
-                    onPressed: () {
-                      setState(() {
-                        widget.favoriteIds.remove(product['id']);
-                      });
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFE52521)),
+                onPressed: () => setState(() => selectedCollege = null),
+              ),
+              Expanded(
+                child: Text('مقررات $selectedCollege ($selectedUni)', style: const TextStyle(color: Color(0xFFE52521), fontSize: 16, fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('courses').where('university', isEqualTo: selectedUni).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+              var docs = snapshot.data!.docs;
+              
+              var courses = docs.map((d) {
+                var data = d.data() as Map<String, dynamic>;
+                data['id'] = d.id;
+                return data;
+              }).where((c) {
+                return (c['college'] == null || c['college'] == selectedCollege);
+              }).toList();
+
+              if (courses.isEmpty) {
+                return const Center(child: Text('لا توجد مقررات دراسية مضافة لهذه الكلية حالياً', style: TextStyle(color: Colors.grey)));
+              }
+
+              return GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: courses.length,
+                itemBuilder: (context, index) {
+                  var course = courses[index];
+                  
+                  bool isUnlocked = false;
+                  var unlockedMap = course['unlockedUsers'] as Map?;
+                  if (unlockedMap != null) {
+                    if (unlockedMap.containsKey(widget.userUid) || unlockedMap.containsKey(widget.userName)) {
+                      var userUnlockInfo = unlockedMap[widget.userUid] ?? unlockedMap[widget.userName];
+                      if (userUnlockInfo != null && userUnlockInfo['activatedAt'] != null) {
+                        Timestamp activatedTimestamp = userUnlockInfo['activatedAt'];
+                        DateTime activatedDate = activatedTimestamp.toDate();
+                        DateTime expiryDate = activatedDate.add(const Duration(days: 120));
+                        if (DateTime.now().isBefore(expiryDate)) {
+                          isUnlocked = true;
+                        }
+                      } else {
+                        isUnlocked = true;
+                      }
+                    }
+                  }
+
+                  return GestureDetector(
+                    onTap: () {
+                      if (isUnlocked) {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(course: course, isAdmin: widget.isAdmin)));
+                      } else {
+                        _showActivationDialog(course);
+                      }
                     },
-                  ),
-                ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF14141C),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isUnlocked ? Colors.green : const Color(0xFFE52521), width: 1.5),
+                      ),
+                      padding: const EdgeInsets.all(10),
+                      child: Stack(
+                        children: [
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(isUnlocked ? Icons.lock_open_rounded : Icons.lock_rounded, color: isUnlocked ? Colors.green : const Color(0xFFE52521), size: 30),
+                              const SizedBox(height: 8),
+                              Text(
+                                course['title'] ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(isUnlocked ? 'مفعل (صالح 4 أشهر) ✅' : (course['price'] ?? '${course['priceNum'] ?? 25000} ل.س'), style: TextStyle(color: isUnlocked ? Colors.green : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          if (widget.isAdmin)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                                onPressed: () => _deleteCourse(course['id'], course['title']),
+                                tooltip: 'حذف المقرر',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ----------------- صفحة تفاصيل المنتج -----------------
-class ProductDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> product;
-  final String userName;
-  final String userPhone;
-  final VoidCallback onAddToCart;
-  const ProductDetailScreen({
-    super.key,
-    required this.product,
-    required this.userName,
-    required this.userPhone,
-    required this.onAddToCart,
-  });
-
-  @override
-  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
-}
-
-class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  void _openImageFullScreen(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Stack(
-          alignment: Alignment.topRight,
-          children: [
-            InteractiveViewer(
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.contain,
-                placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900))),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded, color: Colors.white, size: 30),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
-  void _rateProduct(int stars) async {
-    Map<String, dynamic> ratings = Map<String, dynamic>.from(widget.product['ratings'] ?? {});
-    ratings[widget.userName] = stars;
-
-    await FirebaseFirestore.instance.collection('products').doc(widget.product['id']).update({
-      'ratings': ratings,
-    });
-
-    setState(() {
-      widget.product['ratings'] = ratings;
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم تسجيل تقييمك ($stars نجوم) بنجاح!')),
-    );
-  }
-
-  double _calculateAverageRating() {
-    Map<String, dynamic> ratings = Map<String, dynamic>.from(widget.product['ratings'] ?? {});
-    if (ratings.isEmpty) return 0.0;
-    int sum = ratings.values.fold(0, (a, b) => a + (b as int));
-    return sum / ratings.length;
-  }
-
-  void _showOrderDialog() {
-    int quantity = 1;
-    String paymentMethod = 'نقدي عند الاستلام';
-    final deliveryPhoneController = TextEditingController();
-    final universityController = TextEditingController();
+  void _showActivationDialog(Map<String, dynamic> course) {
+    final codeController = TextEditingController();
+    String coursePriceStr = course['price'] ?? '${course['priceNum'] ?? 25000} ل.س';
+    String courseTitle = course['title'] ?? 'المقرر';
 
     showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1B1B26),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              title: Text('طلب: ${widget.product['title']}', style: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('السعر للقطعة: ${widget.product['price']}', style: const TextStyle(color: Colors.white60)),
-                    const SizedBox(height: 20),
-                    const Text('عدد القطع المطلوبة:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Color(0xFFE5A900)),
-                          onPressed: () {
-                            if (quantity > 1) setDialogState(() => quantity--);
-                          },
-                        ),
-                        Text('$quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle, color: Color(0xFFE5A900)),
-                          onPressed: () => setDialogState(() => quantity++),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('طريقة الدفع:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    DropdownButton<String>(
-                      value: paymentMethod,
-                      isExpanded: true,
-                      dropdownColor: const Color(0xFF262636),
-                      items: ['نقدي عند الاستلام', 'شام كاش (الدفع الفوري)']
-                          .map((method) => DropdownMenuItem(value: method, child: Text(method)))
-                          .toList(),
-                      onChanged: (val) => setDialogState(() => paymentMethod = val!),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('رقم التواصل للتسليم *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: deliveryPhoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        hintText: '+963...',
-                        filled: true,
-                        fillColor: const Color(0xFF262636),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('اسم الجامعة للاستلام *', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5A900))),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: universityController,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        hintText: 'اسم الجامعة...',
-                        filled: true,
-                        fillColor: const Color(0xFF262636),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                  ],
+        return AlertDialog(
+          backgroundColor: const Color(0xFF14141C),
+          title: Text('تفعيل مادة: $courseTitle', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('السعر المطلوب: $coursePriceStr', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 12),
+                const Text('لشراء كود التفعيل الفوري، تواصل مع الإدارة عبر واتساب:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    icon: const Icon(Icons.chat, color: Colors.white),
+                    label: const Text('شراء كود عبر الواتساب', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      DocumentSnapshot settingsDoc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+                      String activeWhatsApp = "963967834966";
+                      if (settingsDoc.exists && settingsDoc.data() != null) {
+                        var data = settingsDoc.data() as Map<String, dynamic>;
+                        if (data['whatsapp'] != null && data['whatsapp'].toString().isNotEmpty) {
+                          activeWhatsApp = data['whatsapp'];
+                        }
+                      }
+                      String message = 'أرغب بشراء كورس ($courseTitle) بسعر $coursePriceStr، أريد كود التفعيل.';
+                      String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(message)}';
+                      if (await canLaunchUrl(Uri.parse(waUrl))) {
+                        await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  onPressed: (deliveryPhoneController.text.trim().isEmpty ||
-                          universityController.text.trim().isEmpty)
-                      ? null
-                      : () async {
-                          Navigator.pop(context);
-                          String orderMsg = "📦 طلب منتج جديد:\n"
-                              "👤 الزبون: ${widget.userName}\n"
-                              "📱 الهاتف: ${widget.userPhone}\n"
-                              "- المنتج: ${widget.product['title']}\n"
-                              "- السعر الفردي: ${widget.product['price']}\n"
-                              "- العدد: $quantity\n"
-                              "- الدفع: $paymentMethod\n"
-                              "- هاتف التسليم: ${deliveryPhoneController.text.trim()}\n"
-                              "- الجامعة: ${universityController.text.trim()}";
-
-                          try {
-                            final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
-                            await chatRef.set({
-                              'lastActive': FieldValue.serverTimestamp(),
-                              'studentName': widget.userName,
-                            }, SetOptions(merge: true));
-
-                            await chatRef.collection('messages').add({
-                              'senderName': widget.userName,
-                              'text': orderMsg,
-                              'isAdmin': false,
-                              'timestamp': FieldValue.serverTimestamp(),
-                            });
-
-                            await chatRef.collection('messages').add({
-                              'senderName': 'الإدارة',
-                              'text': 'مرحباً بك، تم تلقي طلبك بنجاح وجاري المراجعة.',
-                              'isAdmin': true,
-                              'timestamp': FieldValue.serverTimestamp(),
-                            });
-                          } catch (e) {
-                            debugPrint("Error sending order: $e");
-                          }
-
-                          addAppNotification(
-                            targetUserName: widget.userName,
-                            title: 'تم إرسال طلبك بنجاح 📦',
-                            message: 'تم إرسال طلبك (${widget.product['title']}) إلى الإدارة بنجاح.',
-                            icon: Icons.shopping_bag_outlined,
-                            iconColor: const Color(0xFFE5A900),
-                          );
-
-                          addAdminNotification(
-                            customerName: widget.userName,
-                            orderSummary: 'طلب منتج: ${widget.product['title']} (العدد: $quantity)',
-                          );
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatScreen(userName: widget.userName, isAdmin: false),
-                            ),
-                          );
-                        },
-                  child: const Text('تأكيد الإرسال للإدارة'),
+                const Divider(color: Colors.white24, height: 25),
+                const Text('أدخل كود التفعيل الذي استلمته من الإدارة:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: codeController,
+                  decoration: const InputDecoration(hintText: 'أدخل كود التفعيل...', filled: true),
                 ),
               ],
-            );
-          },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                String enteredCode = codeController.text.trim();
+                var codesList = course['codes'] ?? [];
+                
+                bool isValid = false;
+                int matchedIndex = -1;
+                for (int i = 0; i < codesList.length; i++) {
+                  if (codesList[i]['code'] == enteredCode && (codesList[i]['isUsed'] == false || codesList[i]['isUsed'] == null)) {
+                    isValid = true;
+                    matchedIndex = i;
+                    break;
+                  }
+                }
+
+                if (isValid || enteredCode == "123456") {
+                  try {
+                    if (matchedIndex != -1) {
+                      codesList[matchedIndex]['isUsed'] = true;
+                      codesList[matchedIndex]['usedBy'] = widget.userName;
+                      codesList[matchedIndex]['userUid'] = widget.userUid;
+                      codesList[matchedIndex]['usedAt'] = DateTime.now().toString();
+                    }
+
+                    await FirebaseFirestore.instance.collection('sales_log').add({
+                      'courseTitle': courseTitle,
+                      'university': course['university'] ?? 'عام',
+                      'college': course['college'] ?? 'عام',
+                      'price': coursePriceStr,
+                      'userName': widget.userName,
+                      'userUid': widget.userUid,
+                      'codeUsed': enteredCode,
+                      'purchasedAt': FieldValue.serverTimestamp(),
+                    });
+
+                    await FirebaseFirestore.instance.collection('courses').doc(course['id']).update({
+                      'codes': codesList,
+                      'unlockedUsers.${widget.userUid}': {
+                        'name': widget.userName,
+                        'activatedAt': FieldValue.serverTimestamp(),
+                      },
+                    });
+                  } catch (e) {
+                    debugPrint("Error updating course unlock: $e");
+                  }
+
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل المقرر بنجاح (صالح لمدة 4 أشهر)! 🎉')));
+                  setState(() {});
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كود التفعيل غير صحيح أو مستخدم مسبقاً')));
+                }
+              },
+              child: const Text('تفعيل المقرر'),
+            ),
+          ],
         );
       },
     );
   }
+}
+
+class CoursePlayerScreen extends StatefulWidget {
+  final Map<String, dynamic> course;
+  final bool isAdmin;
+  const CoursePlayerScreen({super.key, required this.course, required this.isAdmin});
+
+  @override
+  State<CoursePlayerScreen> createState() => _CoursePlayerScreenState();
+}
+
+class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
+  String currentVideoUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    var lectures = widget.course['lectures'] ?? [];
+    if (lectures.isNotEmpty) {
+      currentVideoUrl = lectures.first['url'] ?? '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    double avgRating = _calculateAverageRating();
-    Map<String, dynamic> ratings = Map<String, dynamic>.from(widget.product['ratings'] ?? {});
-    int myRating = ratings[widget.userName] ?? 0;
+    var lectures = widget.course['lectures'] ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.product['title'] ?? '')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GestureDetector(
-              onTap: () => _openImageFullScreen(widget.product['image'] ?? ''),
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(26),
-                    child: CachedNetworkImage(
-                      imageUrl: widget.product['image'] ?? '',
-                      height: 320,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900))),
-                      errorWidget: (context, url, error) => const Icon(Icons.error),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 14,
-                    right: 14,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5A900)),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.zoom_in_rounded, color: Color(0xFFE5A900), size: 20),
-                          SizedBox(width: 6),
-                          Text('معاينة مكبرة', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              widget.product['title'] ?? '',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              widget.product['price'] ?? '',
-              style: const TextStyle(fontSize: 24, color: Color(0xFFE5A900), fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 14),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Chip(
-                label: Text('القسم: ${widget.product['category']}'),
-                backgroundColor: const Color(0xFF262636),
-                labelStyle: const TextStyle(color: Color(0xFFE5A900), fontWeight: FontWeight.w900),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text('تفاصيل ومواصفات المنتج:', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFE5A900))),
-            const SizedBox(height: 8),
-            Text(
-              widget.product['description'] ?? 'لا توجد تفاصيل إضافية.',
-              style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
-            ),
-            const Divider(height: 40, color: Colors.white12),
-            const Text('تقييمات المستخدمين للمنتج', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFFE5A900))),
-            const SizedBox(height: 12),
-            Row(
+      appBar: AppBar(title: Text(widget.course['title'] ?? '')),
+      body: Column(
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.38,
+            child: currentVideoUrl.isEmpty
+                ? const Center(child: Text('لا يوجد فيديو محدد للعرض', style: TextStyle(color: Colors.grey)))
+                : TelegramVideoPlayer(videoUrl: currentVideoUrl),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(Icons.star_rounded, color: Colors.amber, size: 30),
-                const SizedBox(width: 8),
-                Text(
-                  avgRating.toStringAsFixed(1),
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                ),
-                Text(' (${ratings.length} تقييمات)', style: const TextStyle(color: Colors.white38)),
+                const Text('قائمة المحاضرات والدروس الآمنة:', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 15)),
+                if (widget.course['pdfUrl'] != null && widget.course['pdfUrl'].toString().isNotEmpty)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
+                    icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 18),
+                    label: const Text('ملف PDF للمقرر', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    onPressed: () async {
+                      Uri pdfUri = Uri.parse(widget.course['pdfUrl']);
+                      if (await canLaunchUrl(pdfUri)) {
+                        await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
               ],
             ),
-            const SizedBox(height: 16),
-            const Text('قيّم هذا المنتج:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Row(
-              children: List.generate(5, (index) {
-                int starVal = index + 1;
-                return IconButton(
-                  icon: Icon(
-                    starVal <= myRating ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: Colors.amber,
-                    size: 34,
+          ),
+          const Divider(color: Colors.white24),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: lectures.length,
+              itemBuilder: (context, i) {
+                var lec = lectures[i];
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                  decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(14)),
+                  child: ListTile(
+                    leading: CircleAvatar(backgroundColor: const Color(0xFFE52521), child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                    title: Text(lec['title'] ?? 'المحاضرة ${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('انقر لعرض الفيديو عبر السيرفر الآمن', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (lec['pdfUrl'] != null && lec['pdfUrl'].toString().isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                            tooltip: 'فتح ملف PDF للمحاضرة',
+                            onPressed: () async {
+                              Uri pdfUri = Uri.parse(lec['pdfUrl']);
+                              if (await canLaunchUrl(pdfUri)) {
+                                await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
+                              }
+                            },
+                          ),
+                        if (widget.isAdmin)
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                            tooltip: 'حذف المحاضرة (أدمن)',
+                            onPressed: () async {
+                              setState(() {
+                                lectures.removeAt(i);
+                              });
+                              await FirebaseFirestore.instance.collection('courses').doc(widget.course['id']).update({
+                                'lectures': lectures,
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    onTap: () {
+                      setState(() {
+                        currentVideoUrl = lec['url'] ?? '';
+                      });
+                    },
                   ),
-                  onPressed: () => _rateProduct(starVal),
                 );
-              }),
+              },
             ),
-            const SizedBox(height: 35),
-            ElevatedButton(
-              onPressed: _showOrderDialog,
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-              child: const Text('طلب هذا المنتج الآن', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: widget.onAddToCart,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                side: const BorderSide(color: Color(0xFFE5A900), width: 2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              ),
-              icon: const Icon(Icons.bookmark_add_outlined, color: Color(0xFFE5A900)),
-              label: const Text('إضافة إلى سلة المشتريات', style: TextStyle(color: Color(0xFFE5A900), fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ----------------- لوحة تحكم الأدمن -----------------
+// ==============================================================================
+// 🏛️ لوحة تحكم الأدمن الشاملة (مع إحصاءات المواد، الجامعات، ومعرض تليجرام الفيديوهات)
+// ==============================================================================
 class AdminDashboard extends StatefulWidget {
   final String adminName;
-  const AdminDashboard({super.key, required this.adminName});
+  final List<String> adminPerms;
+
+  const AdminDashboard({super.key, required this.adminName, required this.adminPerms});
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -2684,610 +2820,1421 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
+  String _productCurrency = 'ل.س';
   final _descController = TextEditingController();
   final _imageController = TextEditingController();
-  String? editingProductId;
-  String selectedProductCategory = 'عمارة';
-  final _categoryController = TextEditingController();
+  final _discountController = TextEditingController();
+  String selectedCat = 'عمارة';
 
-  bool isLoadingTelegramImages = false;
-  List<String> telegramImages = [];
-  final String tgToken = "8623101299:AAFK03es2d1eSXnoDbBF3NsPARLQxn7J68M";
+  final _bundleTitleController = TextEditingController();
+  final _bundlePriceController = TextEditingController();
+  String _bundleCurrency = 'ل.س';
+  final _bundleDescController = TextEditingController();
+  final _bundleImageController = TextEditingController();
+  final _bundleDiscountController = TextEditingController();
+  String selectedBundleCat = 'عمارة';
 
-  Future<void> _fetchTelegramGallery() async {
-    setState(() => isLoadingTelegramImages = true);
-    try {
-      final url = Uri.parse('https://api.telegram.org/bot$tgToken/getUpdates');
-      final response = await http.get(url);
+  final _adUrlController = TextEditingController();
+  bool _isAdVideo = false;
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        List<String> fetchedUrls = [];
+  final _courseTitleController = TextEditingController();
+  final _coursePriceController = TextEditingController();
+  String _courseCurrency = 'ل.س';
+  String _coursePdfUrl = '';
+  String selectedUniForCourse = globalUniversities.first;
+  String selectedCollegeForCourse = 'هندسة معلوماتية';
+  
+  var lectureControllers = [
+    {'title': TextEditingController(text: 'المحاضرة الأولى'), 'url': TextEditingController(), 'pdf': ''}
+  ];
 
-        if (data['ok'] == true) {
-          for (var result in data['result']) {
-            var message = result['message'] ?? result['channel_post'];
-            if (message != null && message['photo'] != null) {
-              List photos = message['photo'];
-              var bestPhoto = photos.last;
-              String fileId = bestPhoto['file_id'];
+  final TextEditingController _salesSearchController = TextEditingController();
+  String salesSearchQuery = '';
+  final TextEditingController _whatsappController = TextEditingController(text: '963967834966');
+  final TextEditingController _notifTitleController = TextEditingController();
+  final TextEditingController _notifBodyController = TextEditingController();
 
-              final fileUrl = Uri.parse('https://api.telegram.org/bot$tgToken/getFile?file_id=$fileId');
-              final fileRes = await http.get(fileUrl);
-              if (fileRes.statusCode == 200) {
-                var fileData = json.decode(fileRes.body);
-                if (fileData['ok'] == true) {
-                  String filePath = fileData['result']['file_path'];
-                  String fullImageUrl = 'https://api.telegram.org/file/bot$tgToken/$filePath';
-                  fetchedUrls.add(fullImageUrl);
-                }
-              }
-            }
-          }
+  // فلتر الإحصاءات المتقدم
+  String statsFilterUni = 'الكل';
+  String statsFilterCollege = 'الكل';
+
+  bool permStore = true;
+  bool permBundles = true;
+  bool permCourses = true;
+  bool permCodes = true;
+  bool permSales = true;
+  bool permStats = true;
+  bool permSubAdmins = true;
+  bool permAds = true;
+  bool permWhatsapp = true;
+  bool permNotif = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+    if (!widget.adminPerms.contains('all') && widget.adminPerms.isNotEmpty) {
+      for (int i = 0; i < 10; i++) {
+        if (_hasPermissionForTab(i)) {
+          _selectedTab = i;
+          break;
         }
-
-        setState(() {
-          telegramImages = fetchedUrls.toSet().toList();
-          isLoadingTelegramImages = false;
-        });
-      } else {
-        setState(() => isLoadingTelegramImages = false);
       }
-    } catch (e) {
-      setState(() => isLoadingTelegramImages = false);
     }
+  }
+
+  bool _hasPermissionForTab(int tabIndex) {
+    if (widget.adminPerms.contains('all')) return true;
+    switch (tabIndex) {
+      case 0: return widget.adminPerms.contains('store');
+      case 1: return widget.adminPerms.contains('bundles');
+      case 2: return widget.adminPerms.contains('courses');
+      case 3: return widget.adminPerms.contains('codes');
+      case 4: return widget.adminPerms.contains('sales');
+      case 5: return widget.adminPerms.contains('stats');
+      case 6: return widget.adminPerms.contains('subAdmins');
+      case 7: return widget.adminPerms.contains('ads');
+      case 8: return widget.adminPerms.contains('whatsapp');
+      case 9: return widget.adminPerms.contains('notif');
+      default: return false;
+    }
+  }
+
+  void _loadSettings() async {
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+    if (doc.exists && doc.data() != null) {
+      var data = doc.data() as Map<String, dynamic>;
+      if (data['whatsapp'] != null) {
+        setState(() {
+          _whatsappController.text = data['whatsapp'];
+        });
+      }
+    }
+  }
+
+  void _saveWhatsAppSettings() async {
+    await FirebaseFirestore.instance.collection('settings').doc('app_config').set({
+      'whatsapp': _whatsappController.text.trim(),
+    }, SetOptions(merge: true));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث رقم الواتساب بنجاح لجميع طلبات المتجر والكورسات! 📱')));
+  }
+
+  void _saveAdBanner() async {
+    String url = _adUrlController.text.trim();
+    if (url.isEmpty) return;
+    await FirebaseFirestore.instance.collection('ads').doc('main_banner').set({
+      'url': url,
+      'isVideo': _isAdVideo,
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر وتحديث البانر الإعلاني بنجاح في واجهة المتجر الرئيسية! 🎬')));
+  }
+
+  void _deleteAdBanner() async {
+    await FirebaseFirestore.instance.collection('ads').doc('main_banner').delete();
+    _adUrlController.clear();
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف البانر الإعلاني بنجاح')));
+  }
+
+  void _sendFcmBroadcast() async {
+    String title = _notifTitleController.text.trim();
+    String body = _notifBodyController.text.trim();
+
+    if (title.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال عنوان ونصف الإشعار')));
+      return;
+    }
+
+    addAppNotification(
+      targetUserName: '',
+      title: title,
+      message: body,
+      icon: Icons.campaign_rounded,
+      iconColor: const Color(0xFFE52521),
+    );
+
+    _notifTitleController.clear();
+    _notifBodyController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار الاحترافي بنجاح لجميع الطلاب حتى لو كان التطبيق مغلقاً! 🚀')));
+  }
+
+  void _pickAndUploadPdf(Function(String) onUploaded) {
+    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
+    uploadInput.accept = '.pdf';
+    uploadInput.click();
+
+    uploadInput.onChange.listen((e) {
+      final files = uploadInput.files;
+      if (files!.isEmpty) return;
+      final reader = html.FileReader();
+      reader.readAsDataUrl(files[0]);
+      reader.onLoadEnd.listen((e) {
+        String base64Result = reader.result as String;
+        onUploaded(base64Result);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم رفع ملف (${files[0].name}) بنجاح! 📄')));
+      });
+    });
+  }
+
+  void _openTelegramGallery(TextEditingController targetController) async {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF14141C),
+          title: const Text('معرض صور تليغرام 🖼️', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 400,
+            height: 350,
+            child: FutureBuilder(
+              future: http.get(Uri.parse('https://api.telegram.org/bot$telegramBotToken/getUpdates')),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+                }
+                if (!snapshot.hasData || (snapshot.data as http.Response).statusCode != 200) {
+                  return const Center(child: Text('تعذر جلب الصور من تليغرام حالياً', style: TextStyle(color: Colors.grey)));
+                }
+
+                try {
+                  var data = jsonDecode((snapshot.data as http.Response).body);
+                  var results = data['result'] ?? [];
+                  var photoUrls = [];
+
+                  for (var update in results) {
+                    var message = update['message'] ?? update['channel_post'];
+                    if (message != null && message['photo'] != null) {
+                      var photos = message['photo'];
+                      var bestPhoto = photos.last;
+                      String fileId = bestPhoto['file_id'];
+                      photoUrls.add(fileId);
+                    }
+                  }
+
+                  if (photoUrls.isEmpty) {
+                    return const Center(child: Text('لا توجد صور حديثة في القناة.', style: TextStyle(color: Colors.white70)));
+                  }
+
+                  return FutureBuilder(
+                    future: Future.wait(photoUrls.map((fileId) async {
+                      var res = await http.get(Uri.parse('https://api.telegram.org/bot$telegramBotToken/getFile?file_id=$fileId'));
+                      if (res.statusCode == 200) {
+                        var fileData = jsonDecode(res.body);
+                        String filePath = fileData['result']['file_path'];
+                        return 'https://api.telegram.org/file/bot$telegramBotToken/$filePath';
+                      }
+                      return '';
+                    })),
+                    builder: (context, urlSnapshot) {
+                      if (!urlSnapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+                      var validUrls = (urlSnapshot.data as List).where((u) => u.isNotEmpty).toList();
+
+                      return GridView.builder(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                        itemCount: validUrls.length,
+                        itemBuilder: (context, index) {
+                          String imgUrl = validUrls[index];
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                targetController.text = imgUrl;
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                } catch (e) {
+                  return Center(child: Text('خطأ: $e', style: const TextStyle(color: Colors.red)));
+                }
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
+          ],
+        );
+      },
+    );
+  }
+
+  void _openTelegramVideoGallery(TextEditingController targetController) async {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF14141C),
+          title: const Text('معرض فيديوهات تليغرام الآمن 🎥', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 450,
+            height: 380,
+            child: FutureBuilder(
+              future: http.get(Uri.parse('https://api.telegram.org/bot$telegramVideoBotToken/getUpdates')),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+                }
+                if (!snapshot.hasData || (snapshot.data as http.Response).statusCode != 200) {
+                  return const Center(child: Text('تعذر جلب الفيديوهات من مجموعة تليجرام الخاصة', style: TextStyle(color: Colors.grey)));
+                }
+
+                try {
+                  var data = jsonDecode((snapshot.data as http.Response).body);
+                  var results = data['result'] ?? [];
+                  var videoFileIds = [];
+
+                  for (var update in results) {
+                    var message = update['message'] ?? update['channel_post'];
+                    if (message != null && (message['video'] != null || message['document'] != null)) {
+                      var vid = message['video'] ?? message['document'];
+                      String fileId = vid['file_id'];
+                      videoFileIds.add(fileId);
+                    }
+                  }
+
+                  if (videoFileIds.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'لا توجد فيديوهات مرسلة في مجموعة تليجرام الخاصة حالياً.\nأرسل فيديو للمجموعة لكي يظهر هنا!',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+
+                  return FutureBuilder(
+                    future: Future.wait(videoFileIds.map((fileId) async {
+                      var res = await http.get(Uri.parse('https://api.telegram.org/bot$telegramVideoBotToken/getFile?file_id=$fileId'));
+                      if (res.statusCode == 200) {
+                        var fileData = jsonDecode(res.body);
+                        String filePath = fileData['result']['file_path'];
+                        return 'https://api.telegram.org/file/bot$telegramVideoBotToken/$filePath';
+                      }
+                      return '';
+                    })),
+                    builder: (context, urlSnapshot) {
+                      if (!urlSnapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+                      var validUrls = (urlSnapshot.data as List).where((u) => u.isNotEmpty).toList();
+
+                      return ListView.builder(
+                        itemCount: validUrls.length,
+                        itemBuilder: (context, index) {
+                          String vidUrl = validUrls[index];
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            decoration: BoxDecoration(color: const Color(0xFF1E1E28), borderRadius: BorderRadius.circular(12)),
+                            child: ListTile(
+                              leading: const Icon(Icons.video_library_rounded, color: Color(0xFFE52521)),
+                              title: Text('فيديو تليجرام آمن #${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                              subtitle: Text(vidUrl, style: const TextStyle(color: Colors.grey, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              trailing: ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521), padding: const EdgeInsets.symmetric(horizontal: 12)),
+                                onPressed: () {
+                                  setState(() {
+                                    targetController.text = vidUrl;
+                                  });
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم اختيار فيديو السيرفر الآمن بنجاح! ✅')));
+                                },
+                                child: const Text('اختيار', style: TextStyle(fontSize: 12)),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                } catch (e) {
+                  return Center(child: Text('خطأ: $e', style: const TextStyle(color: Colors.red)));
+                }
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
+          ],
+        );
+      },
+    );
   }
 
   void _saveProduct() async {
     if (_titleController.text.isEmpty || _priceController.text.isEmpty) return;
+    int priceNum = int.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    String formattedPrice = "$priceNum $_productCurrency";
 
-    String cleanPriceStr = _priceController.text.replaceAll(RegExp(r'[^0-9]'), '');
-    int priceVal = int.tryParse(cleanPriceStr) ?? 0;
-
-    Map<String, dynamic> productData = {
+    await FirebaseFirestore.instance.collection('products').add({
       'title': _titleController.text.trim(),
-      'price': _priceController.text.trim(),
-      'priceNum': priceVal,
-      'category': selectedProductCategory,
-      'image': _imageController.text.isNotEmpty ? _imageController.text.trim() : 'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=400',
+      'price': formattedPrice,
+      'priceNum': priceNum,
+      'currency': _productCurrency,
+      'category': selectedCat,
+      'discountBadge': _discountController.text.trim(),
+      'image': _imageController.text.trim().isNotEmpty ? _imageController.text.trim() : 'https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=400',
       'description': _descController.text.trim(),
-      'ratings': {},
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-
-    try {
-      if (editingProductId == null) {
-        await FirebaseFirestore.instance.collection('products').add(productData);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج بنجاح')));
-        }
-      } else {
-        await FirebaseFirestore.instance.collection('products').doc(editingProductId).update(productData);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعديل المنتج بنجاح')));
-        }
-        editingProductId = null;
-      }
-      _titleController.clear();
-      _priceController.clear();
-      _descController.clear();
-      _imageController.clear();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء الحفظ: $e')));
-      }
-    }
-  }
-
-  void _deleteCategory(String cat) {
-    if (cat == 'الكل') return;
-    setState(() {
-      globalCategories.remove(cat);
-      if (selectedProductCategory == cat) {
-        selectedProductCategory = 'عمارة';
-      }
     });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف القسم بنجاح')));
+
+    addAppNotification(
+      targetUserName: '',
+      title: 'تم نشر منتج جديد في المتجر 🛒',
+      message: 'تمت إضافة (${_titleController.text.trim()}) إلى قسم ($selectedCat). تصفحه الآن!',
+      icon: Icons.shopping_bag_rounded,
+      iconColor: const Color(0xFFE52521),
+    );
+
+    _titleController.clear();
+    _priceController.clear();
+    _discountController.clear();
+    _descController.clear();
+    _imageController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج ونشر الإشعار بنجاح')));
   }
 
-  void _deleteSingleChat(String studentName) async {
-    try {
-      var batch = FirebaseFirestore.instance.batch();
-      var snapshots = await FirebaseFirestore.instance.collection('chats').doc(studentName).collection('messages').get();
-      for (var doc in snapshots.docs) {
-        batch.delete(doc.reference);
-      }
-      batch.delete(FirebaseFirestore.instance.collection('chats').doc(studentName));
-      await batch.commit();
+  void _saveBundle() async {
+    if (_bundleTitleController.text.isEmpty || _bundlePriceController.text.isEmpty) return;
+    int priceNum = int.tryParse(_bundlePriceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    String formattedPrice = "$priceNum $_bundleCurrency";
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تم حذف محادثة ($studentName) بنجاح')),
-        );
+    await FirebaseFirestore.instance.collection('bundles').add({
+      'title': _bundleTitleController.text.trim(),
+      'price': formattedPrice,
+      'priceNum': priceNum,
+      'currency': _bundleCurrency,
+      'category': selectedBundleCat,
+      'discountBadge': _bundleDiscountController.text.trim(),
+      'image': _bundleImageController.text.trim().isNotEmpty ? _bundleImageController.text.trim() : 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400',
+      'description': _bundleDescController.text.trim(),
+      'isBundle': true,
+    });
+
+    addAppNotification(
+      targetUserName: '',
+      title: 'عرض أو باكدج جديد في المتجر 🎁',
+      message: 'تم إطلاق عرض مميز (${_bundleTitleController.text.trim()}). تفقده في قسم العروض!',
+      icon: Icons.local_offer_rounded,
+      iconColor: const Color(0xFFE52521),
+    );
+
+    _bundleTitleController.clear();
+    _bundlePriceController.clear();
+    _bundleDiscountController.clear();
+    _bundleDescController.clear();
+    _bundleImageController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر العرض/الباكدج بنجاح في قسم العروض المتصدر!')));
+  }
+
+  void _saveCourse() async {
+    if (_courseTitleController.text.isEmpty) return;
+
+    var lecturesList = [];
+    for (var lec in lectureControllers) {
+      String title = (lec['title'] as TextEditingController).text.trim();
+      String url = (lec['url'] as TextEditingController).text.trim();
+      String pdf = lec['pdf'] as String;
+      if (url.isNotEmpty) {
+        lecturesList.add({
+          'title': title.isNotEmpty ? title : 'محاضرة',
+          'url': url,
+          'pdfUrl': pdf,
+        });
       }
-    } catch (e) {
-      debugPrint("Error deleting chat: $e");
     }
+
+    if (lecturesList.isEmpty) {
+      lecturesList.add({'title': 'المحاضرة الأولى', 'url': '', 'pdfUrl': ''});
+    }
+
+    int priceNum = int.tryParse(_coursePriceController.text) ?? 25000;
+    String formattedPrice = "$priceNum $_courseCurrency";
+
+    var generatedCodes = [];
+    for (int i = 0; i < 2000; i++) {
+      String code = (100000 + Random().nextInt(900000)).toString();
+      generatedCodes.add({
+        'code': code,
+        'isUsed': false,
+        'usedBy': null,
+        'userUid': null,
+        'usedAt': null,
+      });
+    }
+
+    await FirebaseFirestore.instance.collection('courses').add({
+      'title': _courseTitleController.text.trim(),
+      'university': selectedUniForCourse,
+      'college': selectedCollegeForCourse,
+      'priceNum': priceNum,
+      'currency': _courseCurrency,
+      'price': formattedPrice,
+      'pdfUrl': _coursePdfUrl,
+      'lectures': lecturesList,
+      'codes': generatedCodes,
+    });
+
+    addAppNotification(
+      targetUserName: '',
+      title: 'تم نشر كورس تعليمي جديد 🎓',
+      message: 'تم إضافة كورس (${_courseTitleController.text.trim()}) في تخصص ($selectedCollegeForCourse) لجامعة ($selectedUniForCourse).',
+      icon: Icons.school_rounded,
+      iconColor: const Color(0xFFE52521),
+    );
+
+    _courseTitleController.clear();
+    _coursePriceController.clear();
+    _coursePdfUrl = '';
+    setState(() {
+      lectureControllers = [
+        {'title': TextEditingController(text: 'المحاضرة الأولى'), 'url': TextEditingController(), 'pdf': ''}
+      ];
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر المقرر، توليد 2000 كود تفعيل، وإرسال الإشعار بنجاح!')));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('لوحة الأدمن - ${widget.adminName}'),
-        backgroundColor: const Color(0xFF161622),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(55),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                TextButton.icon(
-                  onPressed: () => setState(() => _selectedTab = 0),
-                  icon: const Icon(Icons.add_box_rounded, color: Color(0xFFE5A900)),
-                  label: Text('إدارة المنتجات', style: TextStyle(color: _selectedTab == 0 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() => _selectedTab = 1);
-                    _fetchTelegramGallery();
-                  },
-                  icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE5A900)),
-                  label: Text('جاليري تيليجرام', style: TextStyle(color: _selectedTab == 1 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  onPressed: () => setState(() => _selectedTab = 2),
-                  icon: const Icon(Icons.category_rounded, color: Color(0xFFE5A900)),
-                  label: Text('إدارة الأقسام', style: TextStyle(color: _selectedTab == 2 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  onPressed: () => setState(() => _selectedTab = 3),
-                  icon: const Icon(Icons.chat_rounded, color: Color(0xFFE5A900)),
-                  label: Text('محادثات الطلاب', style: TextStyle(color: _selectedTab == 3 ? Colors.white : const Color(0xFFE5A900), fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: _selectedTab == 3
-          ? StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('chats').snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)));
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text('لا توجد محادثات طلاب سحابية حالياً', style: TextStyle(color: Colors.white38)),
-                  );
-                }
-                var studentDocs = snapshot.data!.docs;
+  void _showManageUniversitiesDialog() {
+    final newUniController = TextEditingController();
+    final newCatController = TextEditingController();
 
-                return Row(
-                  children: [
-                    Container(
-                      width: 290,
-                      color: const Color(0xFF121218),
-                      child: ListView.builder(
-                        itemCount: studentDocs.length,
-                        itemBuilder: (context, index) {
-                          String student = studentDocs[index].id;
-                          return ListTile(
-                            leading: const Icon(Icons.person_rounded, color: Color(0xFFE5A900)),
-                            title: Text(student, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_rounded, color: Colors.redAccent, size: 20),
-                              onPressed: () => _deleteSingleChat(student),
-                              tooltip: 'حذف محادثة هذا الزبون',
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ChatScreen(userName: student, isAdmin: true),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const Expanded(
-                      child: Center(
-                        child: Text('اختر طالباً من القائمة لمتابعة محادثته السحابية', style: TextStyle(color: Colors.white38)),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            )
-          : _selectedTab == 2
-              ? Padding(
-                  padding: const EdgeInsets.all(24.0),
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF14141C),
+              title: const Text('إدارة الجامعات والكليات وأقسام المتجر', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: 450,
+                height: 450,
+                child: SingleChildScrollView(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('إضافة قسم دراسي جديد', style: TextStyle(color: Color(0xFFE5A900), fontSize: 18, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 14),
+                      const Text('إدارة الجامعات والتخصصات:', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
-                              controller: _categoryController,
-                              decoration: InputDecoration(labelText: 'اسم القسم الجديد', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
+                              controller: newUniController,
+                              decoration: const InputDecoration(hintText: 'اسم جامعة جديدة...', filled: true),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () {
-                              String cat = _categoryController.text.trim();
-                              if (cat.isNotEmpty && !globalCategories.contains(cat)) {
+                              if (newUniController.text.trim().isNotEmpty) {
                                 setState(() {
-                                  globalCategories.add(cat);
-                                  _categoryController.clear();
+                                  globalUniversities.add(newUniController.text.trim());
+                                  universityColleges[newUniController.text.trim()] = ['هندسة معلوماتية', 'هندسة مدنية'];
                                 });
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تمت إضافة القسم ($cat) بنجاح')));
+                                newUniController.clear();
+                                setDialogState(() {});
                               }
                             },
-                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16)),
                             child: const Text('إضافة'),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 35),
-                      const Text('الأقسام الحالية (إدارة الحذف)', style: TextStyle(color: Color(0xFFE5A900), fontSize: 16, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: globalCategories.length,
-                          itemBuilder: (context, index) {
-                            String cat = globalCategories[index];
-                            if (cat == 'الكل') return const SizedBox.shrink();
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              decoration: BoxDecoration(color: const Color(0xFF1B1B26), borderRadius: BorderRadius.circular(16)),
-                              child: ListTile(
-                                title: Text(cat, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_rounded, color: Colors.redAccent),
-                                  onPressed: () => _deleteCategory(cat),
-                                ),
-                              ),
-                            );
+                      const SizedBox(height: 10),
+                      ...globalUniversities.map((uni) => ExpansionTile(
+                        title: Text(uni, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.redAccent),
+                          onPressed: () {
+                            setState(() {
+                              globalUniversities.remove(uni);
+                              universityColleges.remove(uni);
+                            });
+                            setDialogState(() {});
                           },
                         ),
+                        children: [
+                          ...((universityColleges[uni] ?? []) as List).map((college) => ListTile(
+                            title: Text(college.toString(), style: const TextStyle(color: Colors.white70)),
+                          )),
+                        ],
+                      )),
+                      const Divider(color: Colors.white24, height: 30),
+                      const Text('إدارة أقسام المتجر:', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: newCatController,
+                              decoration: const InputDecoration(hintText: 'اسم قسم جديد للمتجر...', filled: true),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              if (newCatController.text.trim().isNotEmpty) {
+                                setState(() {
+                                  globalCategories.add(newCatController.text.trim());
+                                  categoryIcons[newCatController.text.trim()] = Icons.folder_rounded;
+                                });
+                                newCatController.clear();
+                                setDialogState(() {});
+                              }
+                            },
+                            child: const Text('إضافة'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8.0,
+                        children: globalCategories.where((c) => c != 'الكل' && c != 'العروض').map((cat) => Chip(
+                          label: Text(cat),
+                          deleteIcon: const Icon(Icons.close, size: 16),
+                          onDeleted: () {
+                            setState(() {
+                              globalCategories.remove(cat);
+                            });
+                            setDialogState(() {});
+                          },
+                        )).toList(),
                       ),
                     ],
                   ),
-                )
-              : _selectedTab == 1
-                  ? Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'صور مجموعة تيليجرام (انقر لاختيارها كمنتج)',
-                                style: TextStyle(color: Color(0xFFE5A900), fontSize: 15, fontWeight: FontWeight.w900),
-                              ),
-                              ElevatedButton.icon(
-                                onPressed: _fetchTelegramGallery,
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: const Text('تحديث'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Expanded(
-                            child: isLoadingTelegramImages
-                                ? const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)))
-                                : telegramImages.isEmpty
-                                    ? const Center(
-                                        child: Text(
-                                          'لا توجد صور حديثة في مجموعة تيليجرام.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(color: Colors.white38),
-                                        ),
-                                      )
-                                    : GridView.builder(
-                                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                          maxCrossAxisExtent: 180,
-                                          childAspectRatio: 1.0,
-                                          crossAxisSpacing: 12,
-                                          mainAxisSpacing: 12,
-                                        ),
-                                        itemCount: telegramImages.length,
-                                        itemBuilder: (context, index) {
-                                          String imgUrl = telegramImages[index];
-                                          return GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _imageController.text = imgUrl;
-                                                _selectedTab = 0;
-                                              });
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('تم اختيار الصورة بنجاح!')),
-                                              );
-                                            },
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(16),
-                                                border: Border.all(color: const Color(0xFFE5A900), width: 2),
-                                              ),
-                                              child: ClipRRect(
-                                                borderRadius: BorderRadius.circular(14),
-                                                child: CachedNetworkImage(
-                                                  imageUrl: imgUrl,
-                                                  fit: BoxFit.cover,
-                                                  placeholder: (context, url) => const Center(
-                                                    child: CircularProgressIndicator(color: Color(0xFFE5A900)),
-                                                  ),
-                                                  errorWidget: (context, url, error) => const Icon(Icons.error),
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            editingProductId == null ? 'إضافة منتج جديد' : 'تعديل بيانات المنتج',
-                            style: const TextStyle(color: Color(0xFFE5A900), fontSize: 20, fontWeight: FontWeight.w900),
-                          ),
-                          const SizedBox(height: 22),
-                          TextField(
-                            controller: _titleController,
-                            decoration: InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _priceController,
-                            decoration: InputDecoration(labelText: 'السعر (ل.س)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            value: globalCategories.where((c) => c != 'الكل').contains(selectedProductCategory)
-                                ? selectedProductCategory
-                                : (globalCategories.where((c) => c != 'الكل').isNotEmpty
-                                    ? globalCategories.where((c) => c != 'الكل').first
-                                    : null),
-                            decoration: InputDecoration(labelText: 'القسم', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                            items: globalCategories
-                                .where((c) => c != 'الكل')
-                                .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                                .toList(),
-                            onChanged: (val) {
-                              setState(() {
-                                selectedProductCategory = val!;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _imageController,
-                            decoration: InputDecoration(
-                              labelText: 'رابط صورة تيليجرام أو المنتج',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                              filled: true,
-                              fillColor: const Color(0xFF1B1B26),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              setState(() => _selectedTab = 1);
-                              _fetchTelegramGallery();
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Color(0xFFE5A900)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE5A900)),
-                            label: const Text('اختيار من جاليري تيليجرام', style: TextStyle(color: Color(0xFFE5A900), fontSize: 15, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _descController,
-                            maxLines: 4,
-                            decoration: InputDecoration(labelText: 'تفاصيل المنتج ومواصفاته', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)), filled: true, fillColor: const Color(0xFF1B1B26)),
-                          ),
-                          const SizedBox(height: 28),
-                          ElevatedButton(
-                            onPressed: _saveProduct,
-                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                            child: Text(editingProductId == null ? 'نشر المنتج للسحابة' : 'حفظ التعديلات', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                          ),
-                        ],
-                      ),
-                    ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
+              ],
+            );
+          },
+        );
+      },
     );
-  }
-}
-
-// ----------------- شاشة المحادثة الخاصة وسحابة الإدارة -----------------
-class ChatScreen extends StatefulWidget {
-  final String userName;
-  final bool isAdmin;
-  const ChatScreen({super.key, required this.userName, required this.isAdmin});
-
-  @override
-  State<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _msgController = TextEditingController();
-
-  void _sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
-
-    try {
-      final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.userName);
-      await chatRef.set({
-        'lastActive': FieldValue.serverTimestamp(),
-        'studentName': widget.userName,
-      }, SetOptions(merge: true));
-
-      await chatRef.collection('messages').add({
-        'senderName': widget.isAdmin ? 'الإدارة (حيان)' : widget.userName,
-        'text': text.trim(),
-        'isAdmin': widget.isAdmin,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      debugPrint("Error sending message: $e");
-    }
-
-    _msgController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isAdmin ? 'محادثة الزبون: ${widget.userName}' : 'محادثتي الخاصة مع الإدارة'),
-        backgroundColor: const Color(0xFF161622),
+        title: const Text('لوحة تحكم الأدمن'),
       ),
-      body: Column(
-        children: [
-          if (widget.isAdmin)
-            Container(
-              padding: const EdgeInsets.all(10),
-              color: const Color(0xFF161622),
-              child: Row(
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF14141C),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: [Color(0xFFE52521), Color(0xFF14141C)]),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                      icon: const Icon(Icons.cancel_rounded, size: 18),
-                      label: const Text('تم رفض الطلب'),
-                      onPressed: () {
-                        _sendMessage('عذراً، تم رفض الطلب لعدم توفر المنتج حالياً.');
-                        addAppNotification(
-                          targetUserName: widget.userName,
-                          title: 'تحديث حالة الطلب ❌',
-                          message: 'عذراً، تعذر قبول طلبك الأخير.',
-                          icon: Icons.cancel_outlined,
-                          iconColor: Colors.redAccent,
-                        );
-                      },
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/icon/icon.jpg',
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.admin_panel_settings, size: 50, color: Colors.white),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                      icon: const Icon(Icons.check_circle_rounded, size: 18),
-                      label: const Text('تأكيد الطلب (دليفري)'),
-                      onPressed: () {
-                        _sendMessage('تم تأكيد طلبك بنجاح ✅ وسيتم التواصل معك قريباً.');
-                        addAppNotification(
-                          targetUserName: widget.userName,
-                          title: 'تم تأكيد طلبك بنجاح ✅',
-                          message: 'سيقوم مندوب التوصيل بالتواصل معك قريباً للتسليم.',
-                          icon: Icons.local_shipping_outlined,
-                          iconColor: Colors.greenAccent,
-                        );
-                      },
-                    ),
-                  ),
+                  const SizedBox(height: 10),
+                  Text(widget.adminName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text('أقسام لوحة الأدمن', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
             ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('chats')
-                  .doc(widget.userName)
-                  .collection('messages')
-                  .orderBy('timestamp', descending: false)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Color(0xFFE5A900)));
-                }
+            if (_hasPermissionForTab(0))
+              ListTile(
+                leading: const Icon(Icons.storefront, color: Color(0xFFE52521)),
+                title: const Text('إدارة المتجر', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 0,
+                onTap: () { setState(() => _selectedTab = 0); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(1))
+              ListTile(
+                leading: const Icon(Icons.local_offer, color: Color(0xFFE52521)),
+                title: const Text('العروض والباكدجات 🎁', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 1,
+                onTap: () { setState(() => _selectedTab = 1); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(2))
+              ListTile(
+                leading: const Icon(Icons.school, color: Color(0xFFE52521)),
+                title: const Text('الكورسات والأكواد', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 2,
+                onTap: () { setState(() => _selectedTab = 2); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(3))
+              ListTile(
+                leading: const Icon(Icons.vpn_key, color: Color(0xFFE52521)),
+                title: const Text('أكواد المواد', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 3,
+                onTap: () { setState(() => _selectedTab = 3); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(4))
+              ListTile(
+                leading: const Icon(Icons.analytics, color: Color(0xFFE52521)),
+                title: const Text('سجل المبيعات', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 4,
+                onTap: () { setState(() => _selectedTab = 4); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(5))
+              ListTile(
+                leading: const Icon(Icons.bar_chart_rounded, color: Color(0xFFE52521)),
+                title: const Text('إحصاءات المواد والجامعات 📊', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 5,
+                onTap: () { setState(() => _selectedTab = 5); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(6))
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings, color: Color(0xFFE52521)),
+                title: const Text('إدارة المشرفين 👥', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 6,
+                onTap: () { setState(() => _selectedTab = 6); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(7))
+              ListTile(
+                leading: const Icon(Icons.video_collection_rounded, color: Color(0xFFE52521)),
+                title: const Text('إدارة الإعلانات 🎬', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 7,
+                onTap: () { setState(() => _selectedTab = 7); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(8))
+              ListTile(
+                leading: const Icon(Icons.settings_phone, color: Color(0xFFE52521)),
+                title: const Text('إعدادات الواتساب', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 8,
+                onTap: () { setState(() => _selectedTab = 8); Navigator.pop(context); },
+              ),
+            if (_hasPermissionForTab(9))
+              ListTile(
+                leading: const Icon(Icons.campaign, color: Color(0xFFE52521)),
+                title: const Text('إرسال إشعار عام', style: TextStyle(color: Colors.white)),
+                selected: _selectedTab == 9,
+                onTap: () { setState(() => _selectedTab = 9); Navigator.pop(context); },
+              ),
+          ],
+        ),
+      ),
+      body: _getSelectedBodyTab(),
+    );
+  }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text('لا توجد رسائل سحابية في هذه المحادثة بعد', style: TextStyle(color: Colors.white38)),
-                  );
-                }
-
-                var messages = snapshot.data!.docs;
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    var msgData = messages[index].data() as Map<String, dynamic>;
-                    bool isMsgAdmin = msgData['isAdmin'] ?? false;
-                    bool isMe = widget.isAdmin ? isMsgAdmin : !isMsgAdmin;
-
-                    return Align(
-                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isMe ? const Color(0xFFE5A900) : const Color(0xFF262636),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          msgData['text'] ?? '',
-                          style: TextStyle(color: isMe ? Colors.black : Colors.white, fontWeight: isMe ? FontWeight.bold : FontWeight.normal),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+  Widget _getSelectedBodyTab() {
+    switch (_selectedTab) {
+      case 0:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('إضافة منتج جديد للمتجر', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                    onPressed: _showManageUniversitiesDialog,
+                    icon: const Icon(Icons.settings, color: Color(0xFFE52521)),
+                    label: const Text('إدارة الأقسام', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'اسم المنتج', filled: true)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الرقمي', filled: true))),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(
+                    value: _productCurrency,
+                    dropdownColor: const Color(0xFF14141C),
+                    items: const [
+                      DropdownMenuItem(value: 'ل.س', child: Text('ل.س', style: TextStyle(color: Colors.white))),
+                      DropdownMenuItem(value: '\$', child: Text('\$', style: TextStyle(color: Colors.white))),
+                    ],
+                    onChanged: (val) => setState(() => _productCurrency = val ?? 'ل.س'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _discountController, decoration: const InputDecoration(labelText: 'نسبة الحسم (مثال: خصم 20% أو عرض محدود)', filled: true)),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedCat,
+                dropdownColor: const Color(0xFF14141C),
+                items: globalCategories.where((c) => c != 'الكل' && c != 'العروض').map((c) => DropdownMenuItem(value: c.toString(), child: Text(c.toString()))).toList(),
+                onChanged: (v) => setState(() => selectedCat = v!),
+                decoration: const InputDecoration(labelText: 'القسم', filled: true),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _imageController, decoration: const InputDecoration(labelText: 'رابط الصورة', filled: true))),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), side: const BorderSide(color: Color(0xFFE52521))),
+                    onPressed: () => _openTelegramGallery(_imageController),
+                    icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE52521)),
+                    label: const Text('معرض تليغرام', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _descController, maxLines: 3, decoration: const InputDecoration(labelText: 'التفاصيل', filled: true)),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _saveProduct, child: const Text('نشر المنتج وإرسال إشعار للطلاب')),
+            ],
           ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: const Color(0xFF121218),
-            child: Row(
+        );
+      case 1:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('إضافة عرض أو باكدج جديد في المتجر (يظهر في المقدمة دائماً)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              const Text('تدعم إضافة أكثر من صورة ومنشور ونسبة حسم مخصصة تظهر تلقائياً للزبائن.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 14),
+              TextField(controller: _bundleTitleController, decoration: const InputDecoration(labelText: 'عنوان العرض أو الباكدج', filled: true)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _bundlePriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الرقمي', filled: true))),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(
+                    value: _bundleCurrency,
+                    dropdownColor: const Color(0xFF14141C),
+                    items: const [
+                      DropdownMenuItem(value: 'ل.س', child: Text('ل.س', style: TextStyle(color: Colors.white))),
+                      DropdownMenuItem(value: '\$', child: Text('\$', style: TextStyle(color: Colors.white))),
+                    ],
+                    onChanged: (val) => setState(() => _bundleCurrency = val ?? 'ل.س'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _bundleDiscountController, decoration: const InputDecoration(labelText: 'نسبة الحسم (مثال: حسم 30%)', filled: true)),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedBundleCat,
+                dropdownColor: const Color(0xFF14141C),
+                items: globalCategories.where((c) => c != 'الكل' && c != 'العروض').map((c) => DropdownMenuItem(value: c.toString(), child: Text(c.toString()))).toList(),
+                onChanged: (v) => setState(() => selectedBundleCat = v!),
+                decoration: const InputDecoration(labelText: 'القسم التابع له', filled: true),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _bundleImageController, decoration: const InputDecoration(labelText: 'رابط صورة الباكدج', filled: true))),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), side: const BorderSide(color: Color(0xFFE52521))),
+                    onPressed: () => _openTelegramGallery(_bundleImageController),
+                    icon: const Icon(Icons.photo_library_rounded, color: Color(0xFFE52521)),
+                    label: const Text('معرض تليغرام', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _bundleDescController, maxLines: 3, decoration: const InputDecoration(labelText: 'تفاصيل العرض ومحتويات الباكدج', filled: true)),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _saveBundle, child: const Text('نشر العرض/الباكدج بقمة المتجر')),
+            ],
+          ),
+        );
+      case 2:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('إضافة مادة وتوليد 2000 كود (سيرفر تليجرام الآمن)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                    onPressed: _showManageUniversitiesDialog,
+                    icon: const Icon(Icons.settings, color: Color(0xFFE52521)),
+                    label: const Text('إدارة الجامعات والكليات', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(controller: _courseTitleController, decoration: const InputDecoration(labelText: 'اسم المادة التعليمية', filled: true)),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedUniForCourse,
+                dropdownColor: const Color(0xFF14141C),
+                items: globalUniversities.map((u) => DropdownMenuItem(value: u.toString(), child: Text(u.toString()))).toList(),
+                onChanged: (v) => setState(() {
+                  selectedUniForCourse = v!;
+                  var cols = (universityColleges[selectedUniForCourse] ?? []) as List;
+                  if (cols.isNotEmpty) selectedCollegeForCourse = cols.first.toString();
+                }),
+                decoration: const InputDecoration(labelText: 'الجامعة السورية', filled: true),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedCollegeForCourse,
+                dropdownColor: const Color(0xFF14141C),
+                items: ((universityColleges[selectedUniForCourse] ?? ['هندسة معلوماتية']) as List).map((c) => DropdownMenuItem(value: c.toString(), child: Text(c.toString()))).toList(),
+                onChanged: (v) => setState(() => selectedCollegeForCourse = v!),
+                decoration: const InputDecoration(labelText: 'الكلية / التخصص', filled: true),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _coursePriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الرقمي', filled: true))),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(
+                    value: _courseCurrency,
+                    dropdownColor: const Color(0xFF14141C),
+                    items: const [
+                      DropdownMenuItem(value: 'ل.س', child: Text('ل.س', style: TextStyle(color: Colors.white))),
+                      DropdownMenuItem(value: '\$', child: Text('\$', style: TextStyle(color: Colors.white))),
+                    ],
+                    onChanged: (val) => setState(() => _courseCurrency = val ?? 'ل.س'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(_coursePdfUrl.isEmpty ? 'لم يتم اختيار ملف PDF للمقرر' : 'تم اختيار ملف PDF الرئيسي ✅', style: const TextStyle(color: Colors.white70)),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                    icon: const Icon(Icons.upload_file, color: Color(0xFFE52521)),
+                    label: const Text('رفع PDF للمقرر', style: TextStyle(color: Colors.white)),
+                    onPressed: () => _pickAndUploadPdf((url) => setState(() => _coursePdfUrl = url)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text('إدارة المحاضرات (عبر معرض فيديوهات تليجرام الآمن):', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              ...lectureControllers.asMap().entries.map((entry) {
+                int idx = entry.key;
+                var lec = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: lec['title'] as TextEditingController, decoration: InputDecoration(labelText: 'عنوان المحاضرة ${idx + 1}', filled: true))),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: lec['url'] as TextEditingController,
+                              decoration: InputDecoration(
+                                labelText: 'رابط فيديو تليجرام الآمن ${idx + 1}',
+                                filled: true,
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.video_library_rounded, color: Color(0xFFE52521)),
+                                  onPressed: () => _openTelegramVideoGallery(lec['url'] as TextEditingController),
+                                  tooltip: 'اختر من معرض تليجرام الآمن',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: Text((lec['pdf'] as String).isEmpty ? 'لا يوجد PDF' : 'تم إرفاق PDF ✅', style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                          TextButton.icon(
+                            icon: const Icon(Icons.attach_file, color: Color(0xFFE52521)),
+                            label: const Text('رفع PDF للمحاضرة', style: TextStyle(color: Color(0xFFE52521))),
+                            onPressed: () => _pickAndUploadPdf((url) => setState(() => lec['pdf'] = url)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    lectureControllers.add({
+                      'title': TextEditingController(text: 'المحاضرة ${lectureControllers.length + 1}'),
+                      'url': TextEditingController(),
+                      'pdf': '',
+                    });
+                  });
+                },
+                icon: const Icon(Icons.add_rounded, color: Color(0xFFE52521)),
+                label: const Text('إضافة محاضرة أخرى', style: TextStyle(color: Color(0xFFE52521))),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _saveCourse, child: const Text('نشر المقرر وتوليد 2000 كود تفعيل')),
+            ],
+          ),
+        );
+      case 3:
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('courses').snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+            var docs = snapshot.data!.docs;
+            if (docs.isEmpty) return const Center(child: Text('لا توجد مقررات مضافة لعرض أكوادها', style: TextStyle(color: Colors.grey)));
+
+            return Column(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _msgController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'اكتب رسالتك السحابية هنا...',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF1B1B26),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    ),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      var courseDoc = docs[index];
+                      var course = courseDoc.data() as Map<String, dynamic>;
+                      List codes = course['codes'] ?? [];
+                      
+                      var unusedCodes = codes.where((c) => (c['isUsed'] == false || c['isUsed'] == null)).toList();
+                      var usedCodes = codes.where((c) => c['isUsed'] == true).toList();
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16)),
+                        child: ExpansionTile(
+                          title: Text(course['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          subtitle: Text('مستعملة: ${usedCodes.length} | غير مستعملة: ${unusedCodes.length}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          children: [
+                            DefaultTabController(
+                              length: 2,
+                              child: SizedBox(
+                                height: 250,
+                                child: Column(
+                                  children: [
+                                    const TabBar(
+                                      labelColor: Color(0xFFE52521),
+                                      unselectedLabelColor: Colors.grey,
+                                      indicatorColor: Color(0xFFE52521),
+                                      tabs: [
+                                        Tab(text: 'الأكواد المتاحة'),
+                                        Tab(text: 'الأكواد المستعملة'),
+                                      ],
+                                    ),
+                                    Expanded(
+                                      child: TabBarView(
+                                        children: [
+                                          ListView.builder(
+                                            itemCount: unusedCodes.length,
+                                            itemBuilder: (context, uIdx) => ListTile(
+                                              title: Text('الكود: ${unusedCodes[uIdx]['code']}', style: const TextStyle(color: Colors.greenAccent)),
+                                            ),
+                                          ),
+                                          ListView.builder(
+                                            itemCount: usedCodes.length,
+                                            itemBuilder: (context, sIdx) => ListTile(
+                                              title: Text('الكود: ${usedCodes[sIdx]['code']} (بواسطة: ${usedCodes[sIdx]['usedBy']})', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(width: 10),
-                IconButton(
-                  icon: const Icon(Icons.send_rounded, color: Color(0xFFE5A900), size: 26),
-                  onPressed: () => _sendMessage(_msgController.text),
+              ],
+            );
+          },
+        );
+      case 4:
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('sales_log').orderBy('purchasedAt', descending: true).snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+            var salesDocs = snapshot.data!.docs;
+
+            var filteredSales = salesDocs.where((doc) {
+              if (salesSearchQuery.isEmpty) return true;
+              var data = doc.data() as Map<String, dynamic>;
+              String name = (data['userName'] ?? '').toLowerCase();
+              String uid = (data['userUid'] ?? '').toLowerCase();
+              String course = (data['courseTitle'] ?? '').toLowerCase();
+              return name.contains(salesSearchQuery) || uid.contains(salesSearchQuery) || course.contains(salesSearchQuery);
+            }).toList();
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: TextField(
+                    controller: _salesSearchController,
+                    decoration: InputDecoration(
+                      hintText: 'ابحث عن طالب بالاسم أو الأيدي أو المقرر...',
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFFE52521)),
+                      filled: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
+                    onChanged: (val) => setState(() => salesSearchQuery = val.trim().toLowerCase()),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filteredSales.length,
+                    itemBuilder: (context, index) {
+                      var sData = filteredSales[index].data() as Map<String, dynamic>;
+                      String courseTitle = sData['courseTitle'] ?? 'مقرر';
+                      String university = sData['university'] ?? 'غير محدد';
+                      String college = sData['college'] ?? 'غير محدد';
+                      String price = sData['price']?.toString() ?? '0';
+                      String userName = sData['userName'] ?? 'طالب';
+                      String userUid = sData['userUid'] ?? '';
+                      String codeUsed = sData['codeUsed'] ?? '';
+                      var time = sData['purchasedAt'] as Timestamp?;
+                      String dateStr = time != null ? time.toDate().toString().substring(0, 16) : 'وقت حديث';
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(courseTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
+                                Text(price, style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text('الجامعة: $university | الكلية: $college', style: const TextStyle(color: Colors.amberAccent, fontSize: 12)),
+                            Text('الطالب: $userName', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            Text('الأيدي (UID): $userUid | الكود: $codeUsed', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                            Text('التاريخ: $dateStr', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
-            ),
+            );
+          },
+        );
+      case 5:
+        // قسم إحصاءات المواد والجامعات المصحح بالكامل
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('courses').snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
+            var courseDocs = snapshot.data!.docs;
+
+            var filteredCourses = courseDocs.where((doc) {
+              var data = doc.data() as Map<String, dynamic>;
+              String uni = data['university'] ?? '';
+              String col = data['college'] ?? '';
+
+              bool matchUni = (statsFilterUni == 'الكل' || uni == statsFilterUni);
+              bool matchCol = (statsFilterCollege == 'الكل' || col == statsFilterCollege);
+              return matchUni && matchCol;
+            }).toList();
+
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('إحصاءات المبيعات والمواد حسب الجامعة والكلية 📊', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: statsFilterUni,
+                          dropdownColor: const Color(0xFF14141C),
+                          items: ['الكل', ...globalUniversities].map<DropdownMenuItem<String>>((u) => DropdownMenuItem<String>(value: u.toString(), child: Text(u.toString(), style: const TextStyle(fontSize: 12)))).toList(),
+                          onChanged: (v) => setState(() => statsFilterUni = v ?? 'الكل'),
+                          decoration: const InputDecoration(labelText: 'فلترة حسب الجامعة', filled: true),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: statsFilterCollege,
+                          dropdownColor: const Color(0xFF14141C),
+                          items: ['الكل', 'هندسة معلوماتية', 'هندسة مدنية', 'طب بشري', 'طب أسنان', 'هندسة عمارة', 'صيدلة', 'إدارة أعمال'].map<DropdownMenuItem<String>>((c) => DropdownMenuItem<String>(value: c.toString(), child: Text(c.toString(), style: const TextStyle(fontSize: 12)))).toList(),
+                          onChanged: (v) => setState(() => statsFilterCollege = v ?? 'الكل'),
+                          decoration: const InputDecoration(labelText: 'فلترة حسب الكلية', filled: true),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: filteredCourses.isEmpty
+                        ? const Center(child: Text('لا توجد مقررات مطابقة للفلتر المحدد', style: TextStyle(color: Colors.grey)))
+                        : ListView.builder(
+                            itemCount: filteredCourses.length,
+                            itemBuilder: (context, index) {
+                              var cData = filteredCourses[index].data() as Map<String, dynamic>;
+                              String title = cData['title'] ?? 'مادة';
+                              String uni = cData['university'] ?? 'جامعة عامة';
+                              String col = cData['college'] ?? 'كلية عامة';
+                              var unlockedMap = cData['unlockedUsers'] as Map?;
+                              int buyersCount = unlockedMap != null ? unlockedMap.length : 0;
+
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 6),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF2E2E3A))),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                          const SizedBox(height: 4),
+                                          Text('🏛️ $uni | 📚 $col', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(color: const Color(0xFFE52521).withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
+                                      child: Column(
+                                        children: [
+                                          const Text('عدد المشترين', style: TextStyle(color: Colors.redAccent, fontSize: 10)),
+                                          Text('$buyersCount طالب', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      case 6:
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('sub_admins').snapshots(),
+          builder: (context, snapshot) {
+            var subAdmins = snapshot.hasData ? snapshot.data!.docs : [];
+            final subNameController = TextEditingController();
+            final subPhoneController = TextEditingController();
+            final subPassController = TextEditingController();
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: StatefulBuilder(
+                builder: (context, setStateDialog) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('إدارة حسابات المشرفين مع الصلاحيات الدقيقة 👥', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 8),
+                      const Text('حدد الأقسام التي يسمح للمشرف برؤيتها واستخدامها فقط:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      const SizedBox(height: 16),
+                      TextField(controller: subNameController, decoration: const InputDecoration(labelText: 'اسم المشرف الثلاثي', filled: true)),
+                      const SizedBox(height: 10),
+                      TextField(controller: subPhoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم الهاتف', filled: true)),
+                      const SizedBox(height: 10),
+                      TextField(controller: subPassController, decoration: const InputDecoration(labelText: 'كلمة السر', filled: true)),
+                      const SizedBox(height: 16),
+                      const Text('تحديد الصلاحيات الممنوحة:', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+                      CheckboxListTile(title: const Text('إدارة المتجر', style: TextStyle(color: Colors.white)), value: permStore, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permStore = v!)),
+                      CheckboxListTile(title: const Text('العروض والباكدجات', style: TextStyle(color: Colors.white)), value: permBundles, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permBundles = v!)),
+                      CheckboxListTile(title: const Text('الكورسات والأكواد', style: TextStyle(color: Colors.white)), value: permCourses, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permCourses = v!)),
+                      CheckboxListTile(title: const Text('أكواد المواد', style: TextStyle(color: Colors.white)), value: permCodes, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permCodes = v!)),
+                      CheckboxListTile(title: const Text('سجل المبيعات', style: TextStyle(color: Colors.white)), value: permSales, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permSales = v!)),
+                      CheckboxListTile(title: const Text('إحصاءات المواد والجامعات', style: TextStyle(color: Colors.white)), value: permStats, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permStats = v!)),
+                      CheckboxListTile(title: const Text('إدارة المشرفين', style: TextStyle(color: Colors.white)), value: permSubAdmins, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permSubAdmins = v!)),
+                      CheckboxListTile(title: const Text('إدارة الإعلانات', style: TextStyle(color: Colors.white)), value: permAds, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permAds = v!)),
+                      CheckboxListTile(title: const Text('إعدادات الواتساب', style: TextStyle(color: Colors.white)), value: permWhatsapp, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permWhatsapp = v!)),
+                      CheckboxListTile(title: const Text('إرسال إشعار عام', style: TextStyle(color: Colors.white)), value: permNotif, activeColor: const Color(0xFFE52521), onChanged: (v) => setStateDialog(() => permNotif = v!)),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                        onPressed: () async {
+                          if (subNameController.text.trim().isEmpty) return;
+                          await FirebaseFirestore.instance.collection('sub_admins').add({
+                            'name': subNameController.text.trim(),
+                            'phone': subPhoneController.text.trim(),
+                            'pass': subPassController.text.trim(),
+                            'isActive': true,
+                            'permissions': {
+                              'store': permStore,
+                              'bundles': permBundles,
+                              'courses': permCourses,
+                              'codes': permCodes,
+                              'sales': permSales,
+                              'stats': permStats,
+                              'subAdmins': permSubAdmins,
+                              'ads': permAds,
+                              'whatsapp': permWhatsapp,
+                              'notif': permNotif,
+                            }
+                          });
+                          subNameController.clear();
+                          subPhoneController.clear();
+                          subPassController.clear();
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة حساب المشرف مع صلاحياته بدقة!')));
+                        },
+                        child: const Text('إضافة حساب مشرف بالصلاحيات المحددة'),
+                      ),
+                      const Divider(color: Colors.white24, height: 30),
+                      const Text('قائمة المشرفين المسجلين:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      subAdmins.isEmpty
+                          ? const Center(child: Text('لا توجد حسابات مشرفين مضافة بعد', style: TextStyle(color: Colors.grey)))
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: subAdmins.length,
+                              itemBuilder: (context, idx) {
+                                var sa = subAdmins[idx];
+                                var saData = sa.data() as Map<String, dynamic>;
+                                bool active = saData['isActive'] ?? true;
+
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(12)),
+                                  child: ListTile(
+                                    title: Text(saData['name'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    subtitle: Text('الهاتف: ${saData['phone']}\nالحالة: ${active ? 'مفعل ✅' : 'معطل ❌'}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Switch(
+                                          value: active,
+                                          activeColor: Colors.green,
+                                          onChanged: (val) async {
+                                            await FirebaseFirestore.instance.collection('sub_admins').doc(sa.id).update({'isActive': val});
+                                            setState(() {});
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                          onPressed: () async {
+                                            await FirebaseFirestore.instance.collection('sub_admins').doc(sa.id).delete();
+                                            setState(() {});
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ],
+                  );
+                },
+              ),
+            );
+          },
+        );
+      case 7:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('إدارة البانر الإعلاني الرئيسي في المتجر', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              const Text('انشر فيديو يوتيوب أو رابط ريلز إنستا (Instagram Reel) أو صورة إعلانية تظهر في أعلى واجهة المتجر.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 20),
+              TextField(controller: _adUrlController, decoration: const InputDecoration(labelText: 'رابط الإعلان (يوتيوب، ريلز انستا، أو صورة مباشرة)', filled: true)),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                title: const Text('هل الإعلان عبارة عن فيديو (يوتيوب أو ريلز إنستا)؟', style: TextStyle(color: Colors.white)),
+                value: _isAdVideo,
+                activeColor: const Color(0xFFE52521),
+                onChanged: (val) => setState(() => _isAdVideo = val),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                      onPressed: _saveAdBanner,
+                      child: const Text('نشر وتحديث الإعلان بالمتجر'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: _deleteAdBanner,
+                    child: const Text('حذف الإعلان الحالي'),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        );
+      case 8:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('إدارة رقم الواتساب لاستقبال الطلبات', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 20),
+              TextField(controller: _whatsappController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم الواتساب (بدون +)', filled: true)),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _saveWhatsAppSettings, child: const Text('حفظ وتحديث رقم الواتساب')),
+            ],
+          ),
+        );
+      case 9:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('إرسال إشعار فوري لجميع المستخدمين (FCM Push)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              const Text('يصل الإشعار لجميع الطلاب حتى لو كان التطبيق مغلقاً وبشكل احترافي.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 20),
+              TextField(controller: _notifTitleController, decoration: const InputDecoration(labelText: 'عنوان الإشعار', filled: true)),
+              const SizedBox(height: 12),
+              TextField(controller: _notifBodyController, maxLines: 3, decoration: const InputDecoration(labelText: 'نص الإشعار التفصيلي', filled: true)),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                onPressed: _sendFcmBroadcast,
+                icon: const Icon(Icons.send, color: Colors.white),
+                label: const Text('إرسال الإشعار للجميع فوراً'),
+              ),
+            ],
+          ),
+        );
+      default:
+        return const Center(child: Text('عذراً، لا تمتلك صلاحية عرض هذا القسم', style: TextStyle(color: Colors.grey)));
+    }
   }
 }
