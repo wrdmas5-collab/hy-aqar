@@ -8,9 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'dart:convert';
 import 'dart:ui';
-import 'dart:ui_web' as ui_web;
 import 'dart:math';
-import 'dart:html' as html;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1726,19 +1724,31 @@ class _AdVideoOrReelPlayerWidgetState extends State<AdVideoOrReelPlayerWidget> {
   @override
   Widget build(BuildContext context) {
     if (isInstagram) {
-      String embedUrl = widget.videoUrl.endsWith('/') ? '${widget.videoUrl}embed' : '${widget.videoUrl}/embed';
-      String viewTypeId = 'insta-reel-${widget.videoUrl.hashCode}';
-      
-      ui_web.platformViewRegistry.registerViewFactory(viewTypeId, (int id) {
-        final html.IFrameElement iframeElement = html.IFrameElement()
-          ..src = embedUrl
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%';
-        return iframeElement;
-      });
-
-      return HtmlElementView(viewType: viewTypeId);
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.video_library_rounded, color: Color(0xFFE52521), size: 40),
+              const SizedBox(height: 8),
+              const Text('إعلان إنستغرام (ريلز)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                icon: const Icon(Icons.open_in_new, color: Colors.white),
+                label: const Text('فتح الريلز على إنستغرام', style: TextStyle(color: Colors.white)),
+                onPressed: () async {
+                  final uri = Uri.parse(widget.videoUrl);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Stack(
@@ -1766,7 +1776,7 @@ class _AdVideoOrReelPlayerWidgetState extends State<AdVideoOrReelPlayerWidget> {
 }
 
 // ==============================================================================
-// 🎬 مشغل فيديو تليجرام الآمن المخصص (مضاد للتحميل، إخفاء المصدر، تقديم وترجيع)
+// 🎬 مشغل فيديو تليجرام الآمن المخصص
 // ==============================================================================
 class TelegramVideoPlayer extends StatefulWidget {
   final String videoUrl;
@@ -1847,15 +1857,15 @@ class _TelegramVideoPlayerState extends State<TelegramVideoPlayer> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                 VideoProgressIndicator(
-  _controller,
-  allowScrubbing: true,
-  colors: VideoProgressColors(
-    playedColor: const Color(0xFFE52521),
-    bufferedColor: Colors.white30,
-    backgroundColor: Colors.white10,
-  ),
-),
+                  VideoProgressIndicator(
+                    _controller,
+                    allowScrubbing: true,
+                    colors: VideoProgressColors(
+                      playedColor: const Color(0xFFE52521),
+                      bufferedColor: Colors.white30,
+                      backgroundColor: Colors.white10,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2803,7 +2813,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 }
 
 // ==============================================================================
-// 🏛️ لوحة تحكم الأدمن الشاملة (مع إحصاءات المواد، الجامعات، ومعرض تليجرام الفيديوهات)
+// 🏛️ لوحة تحكم الأدمن الشاملة
 // ==============================================================================
 class AdminDashboard extends StatefulWidget {
   final String adminName;
@@ -2958,22 +2968,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار الاحترافي بنجاح لجميع الطلاب حتى لو كان التطبيق مغلقاً! 🚀')));
   }
 
-  void _pickAndUploadPdf(Function(String) onUploaded) {
-    html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
-    uploadInput.accept = '.pdf';
-    uploadInput.click();
-
-    uploadInput.onChange.listen((e) {
-      final files = uploadInput.files;
-      if (files!.isEmpty) return;
-      final reader = html.FileReader();
-      reader.readAsDataUrl(files[0]);
-      reader.onLoadEnd.listen((e) {
-        String base64Result = reader.result as String;
-        onUploaded(base64Result);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم رفع ملف (${files[0].name}) بنجاح! 📄')));
-      });
-    });
+  // طريقة إدخال رابط الـ PDF (متوافقة مع أندرويد APK والويب تماماً)
+  void _inputPdfUrlDialog(Function(String) onUploaded) {
+    final pdfController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF14141C),
+          title: const Text('إدخال رابط ملف PDF 📄', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: pdfController,
+            decoration: const InputDecoration(
+              labelText: 'رابط ملف PDF (Google Drive, Telegram, etc.)',
+              filled: true,
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () {
+                if (pdfController.text.trim().isNotEmpty) {
+                  onUploaded(pdfController.text.trim());
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إرفاق رابط ملف PDF بنجاح! ✅')),
+                  );
+                }
+              },
+              child: const Text('حفظ وإرفاق'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _openTelegramGallery(TextEditingController targetController) async {
@@ -3711,13 +3739,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(_coursePdfUrl.isEmpty ? 'لم يتم اختيار ملف PDF للمقرر' : 'تم اختيار ملف PDF الرئيسي ✅', style: const TextStyle(color: Colors.white70)),
+                    child: Text(_coursePdfUrl.isEmpty ? 'لم يتم إدخال رابط PDF للمقرر' : 'تم إدخال رابط PDF الرئيسي ✅', style: const TextStyle(color: Colors.white70)),
                   ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
-                    icon: const Icon(Icons.upload_file, color: Color(0xFFE52521)),
-                    label: const Text('رفع PDF للمقرر', style: TextStyle(color: Colors.white)),
-                    onPressed: () => _pickAndUploadPdf((url) => setState(() => _coursePdfUrl = url)),
+                    icon: const Icon(Icons.link, color: Color(0xFFE52521)),
+                    label: const Text('إدخال رابط PDF للمقرر', style: TextStyle(color: Colors.white)),
+                    onPressed: () => _inputPdfUrlDialog((url) => setState(() => _coursePdfUrl = url)),
                   ),
                 ],
               ),
@@ -3755,11 +3783,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Expanded(child: Text((lec['pdf'] as String).isEmpty ? 'لا يوجد PDF' : 'تم إرفاق PDF ✅', style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                          Expanded(child: Text((lec['pdf'] as String).isEmpty ? 'لا يوجد PDF' : 'تم إرفاق رابط PDF ✅', style: const TextStyle(color: Colors.grey, fontSize: 12))),
                           TextButton.icon(
-                            icon: const Icon(Icons.attach_file, color: Color(0xFFE52521)),
-                            label: const Text('رفع PDF للمحاضرة', style: TextStyle(color: Color(0xFFE52521))),
-                            onPressed: () => _pickAndUploadPdf((url) => setState(() => lec['pdf'] = url)),
+                            icon: const Icon(Icons.link, color: Color(0xFFE52521)),
+                            label: const Text('إدخال رابط PDF للمحاضرة', style: TextStyle(color: Color(0xFFE52521))),
+                            onPressed: () => _inputPdfUrlDialog((url) => setState(() => lec['pdf'] = url)),
                           ),
                         ],
                       ),
@@ -3938,7 +3966,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
           },
         );
       case 5:
-        // قسم إحصاءات المواد والجامعات المصحح بالكامل
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('courses').snapshots(),
           builder: (context, snapshot) {
