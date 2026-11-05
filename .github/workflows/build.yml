@@ -26,9 +26,12 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Android SDK 36
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK Platform 36
         run: |
-          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-36"
+          echo "y" | sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Get Flutter dependencies
         run: flutter pub get
