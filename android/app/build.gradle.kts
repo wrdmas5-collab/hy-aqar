@@ -30,18 +30,6 @@ android {
     }
 }
 
-configurations.all {
-    resolutionStrategy {
-        eachDependency {
-            if (requested.name.contains("aar-metadata") || requested.name.contains("CheckAarMetadata")) {
-                useVersion("36.0.0")
-            }
-        }
-    }
-}
-
-project.ext.set("android.injected.checkAarMetadata", false)
-
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
@@ -52,10 +40,8 @@ flutter {
     source = "../.."
 }
 
-subprojects {
-    afterEvaluate { project ->
-        project.tasks.matching { it.name.contains("CheckAarMetadata") }.configureEach {
-            enabled = false
-        }
+tasks.configureEach {
+    if (name.contains("CheckAarMetadata")) {
+        enabled = false
     }
 }
