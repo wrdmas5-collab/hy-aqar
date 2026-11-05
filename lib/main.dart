@@ -4,6 +4,8 @@ import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:ui';
 import 'dart:math';
 import 'dart:io';
@@ -201,14 +203,14 @@ class SecureYouTubePlayer extends StatelessWidget {
           top: 0,
           left: 0,
           right: 0,
-          height: 55,
+          height: 40,
           child: Container(color: Colors.transparent),
         ),
         Positioned(
           bottom: 0,
           right: 0,
-          width: 90,
-          height: 45,
+          width: 80,
+          height: 40,
           child: Container(color: Colors.transparent),
         ),
       ],
@@ -1015,22 +1017,6 @@ Map universityColleges = {
   'جامعة الحواش الخاصة (HPU)': ['صيدلة', 'طب أسنان', 'هندسة معلوماتية', 'هندسة مدنية'],
 };
 
-Map collegeImages = {
-  'طب أسنان': 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=500',
-  'هندسة مدنية': 'https://images.unsplash.com/photo-1541888946425-d0fbb18f86f7?w=500',
-  'هندسة معلوماتية': 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500',
-  'هندسة عمارة': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=500',
-  'طب بشري': 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=500',
-  'هندسة ديكور': 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=500',
-  'هندسة اتصالات': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=500',
-  'إدارة أعمال': 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=500',
-  'علوم أساسية': 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=500',
-  'هندسة إلكترونيات': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500',
-  'هندسة ميكاترونيكس': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500',
-  'هندسة برمجيات': 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=500',
-  'ذكاء اصطناعي': 'https://images.unsplash.com/photo-1677442136019-21780efad99a?w=500',
-};
-
 class HomeScreen extends StatefulWidget {
   final String userName;
   final String userPhone;
@@ -1249,88 +1235,116 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     bool isDark = HyAcademyApp.of(context).isDarkMode;
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipOval(
-              child: Image.asset(
-                'assets/icon/icon.jpg',
-                width: 32,
-                height: 32,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront, color: Color(0xFFE52521)),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        bool? shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF14141C),
+            title: const Text('تأكيد الخروج', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+            content: const Text('هل تريد الخروج من التطبيق؟', style: TextStyle(color: Colors.white)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('لا', style: TextStyle(color: Colors.grey)),
               ),
-            ),
-            const SizedBox(width: 8),
-            const Text('hy Academy'),
-          ],
-        ),
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart_rounded, color: Color(0xFFE52521)),
-                onPressed: _openCartSheet,
-                tooltip: 'سلة المشتريات',
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('نعم', style: TextStyle(color: Colors.white)),
               ),
-              if (globalCart.isNotEmpty)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Color(0xFFE52521), shape: BoxShape.circle),
-                    child: Text('${globalCart.length}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                  ),
-                ),
             ],
           ),
-          IconButton(
-            icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE52521)),
-            onPressed: () => HyAcademyApp.of(context).toggleTheme(),
+        );
+        if (shouldExit == true) {
+          exit(0);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipOval(
+                child: Image.asset(
+                  'assets/icon/icon.jpg',
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront, color: Color(0xFFE52521)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text('hy Academy'),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE52521)),
-            onPressed: _openNotificationsSheet,
-          ),
-          if (widget.isAdmin)
-            TextButton.icon(
-              icon: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFE52521)),
-              label: const Text('لوحة الأدمن', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AdminDashboard(
-                      adminName: widget.userName,
-                      adminPerms: widget.adminPerms,
+          actions: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.shopping_cart_rounded, color: Color(0xFFE52521)),
+                  onPressed: _openCartSheet,
+                  tooltip: 'سلة المشتريات',
+                ),
+                if (globalCart.isNotEmpty)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Color(0xFFE52521), shape: BoxShape.circle),
+                      child: Text('${globalCart.length}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                );
-              },
+              ],
             ),
-        ],
-      ),
-      body: _currentNavIndex == 0
-          ? _buildStoreTab(isDark)
-          : _currentNavIndex == 1
-              ? CoursesAcademyTab(userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin)
-              : _buildProfileTab(),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: isDark ? const Color(0xFF14141C) : Colors.white,
-        selectedItemColor: const Color(0xFFE52521),
-        unselectedItemColor: Colors.grey,
-        currentIndex: _currentNavIndex,
-        onTap: (val) => setState(() => _currentNavIndex = val),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.storefront_rounded), label: 'المتجر'),
-          BottomNavigationBarItem(icon: Icon(Icons.school_rounded), label: 'المنصة والكورسات'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'حسابي'),
-        ],
+            IconButton(
+              icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFFE52521)),
+              onPressed: () => HyAcademyApp.of(context).toggleTheme(),
+            ),
+            IconButton(
+              icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE52521)),
+              onPressed: _openNotificationsSheet,
+            ),
+            if (widget.isAdmin)
+              TextButton.icon(
+                icon: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFE52521)),
+                label: const Text('لوحة الأدمن', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AdminDashboard(
+                        adminName: widget.userName,
+                        adminPerms: widget.adminPerms,
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+        body: _currentNavIndex == 0
+            ? _buildStoreTab(isDark)
+            : _currentNavIndex == 1
+                ? CoursesAcademyTab(userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin)
+                : _buildProfileTab(),
+        bottomNavigationBar: BottomNavigationBar(
+          backgroundColor: isDark ? const Color(0xFF14141C) : Colors.white,
+          selectedItemColor: const Color(0xFFE52521),
+          unselectedItemColor: Colors.grey,
+          currentIndex: _currentNavIndex,
+          onTap: (val) => setState(() => _currentNavIndex = val),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.storefront_rounded), label: 'المتجر'),
+            BottomNavigationBarItem(icon: Icon(Icons.school_rounded), label: 'المنصة والكورسات'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'حسابي'),
+          ],
+        ),
       ),
     );
   }
@@ -1482,7 +1496,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemCount: totalGridCount,
                     itemBuilder: (context, index) {
                       if (showAdInGrid && index == 0) {
-                        return _buildAdGridCard(adData!);
+                        return InlineVideoAdCard(adData: adData!);
                       }
 
                       int itemIndex = showAdInGrid ? index - 1 : index;
@@ -1643,110 +1657,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildAdGridCard(Map<String, dynamic> adData) {
-    String url = adData['url'] ?? '';
-    bool isInstagram = url.contains('instagram.com');
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AdFullScreenView(adData: adData),
-          ),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF181820),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE52521), width: 1.5),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  isInstagram
-                      ? Container(
-                          color: Colors.purple.shade900,
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.video_library_rounded, color: Colors.white, size: 36),
-                              SizedBox(height: 4),
-                              Text('إعلان إنستغرام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                            ],
-                          ),
-                        )
-                      : Container(
-                          color: Colors.black87,
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.play_circle_fill_rounded, color: Color(0xFFE52521), size: 45),
-                              SizedBox(height: 4),
-                              Text('فيديو إعلاني', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                            ],
-                          ),
-                        ),
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE52521),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'إعلان 📢',
-                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('إعلان برعاية المتجر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 32,
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isInstagram ? Colors.purple : const Color(0xFFE52521),
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => AdFullScreenView(adData: adData),
-                          ),
-                        );
-                      },
-                      child: Text(isInstagram ? 'زيارة انستغرام' : 'مشاهدة الإعلان', style: const TextStyle(fontSize: 11, color: Colors.white)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildProfileTab() {
     return Center(
       child: Column(
@@ -1784,133 +1694,40 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class MiniAdYouTubePlayer extends StatefulWidget {
-  final String videoUrl;
-  const MiniAdYouTubePlayer({super.key, required this.videoUrl});
-
-  @override
-  State<MiniAdYouTubePlayer> createState() => _MiniAdYouTubePlayerState();
-}
-
-class _MiniAdYouTubePlayerState extends State<MiniAdYouTubePlayer> {
-  late YoutubePlayerController _controller;
-  bool isPlaying = true;
-
-  String? extractAdId(String url) {
-    final regExp = RegExp(
-      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
-      caseSensitive: false,
-      unicode: true,
-    );
-    final match = regExp.firstMatch(url);
-    return match?.group(1);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    String? vidId = extractAdId(widget.videoUrl);
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: vidId ?? 'dQw4w9WgXcQ',
-      autoPlay: true,
-      params: const YoutubePlayerParams(
-        showControls: false,
-        showFullscreenButton: false,
-        strictRelatedVideos: true,
-        loop: true,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.close();
-    super.dispose();
-  }
-
-  void _togglePlayPause() {
-    setState(() {
-      if (isPlaying) {
-        _controller.pauseVideo();
-        isPlaying = false;
-      } else {
-        _controller.playVideo();
-        isPlaying = true;
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        SecureYouTubePlayer(controller: _controller, showControls: false),
-        Positioned(
-          bottom: 4,
-          left: 4,
-          child: CircleAvatar(
-            backgroundColor: Colors.black54,
-            radius: 16,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 18),
-              onPressed: _togglePlayPause,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class AdFullScreenView extends StatefulWidget {
+class InlineVideoAdCard extends StatefulWidget {
   final Map<String, dynamic> adData;
-  const AdFullScreenView({super.key, required this.adData});
+  const InlineVideoAdCard({super.key, required this.adData});
 
   @override
-  State<AdFullScreenView> createState() => _AdFullScreenViewState();
+  State<InlineVideoAdCard> createState() => _InlineVideoAdCardState();
 }
 
-class _AdFullScreenViewState extends State<AdFullScreenView> {
-  late YoutubePlayerController _playerController;
-  bool isInstagram = false;
-
-  String? extractAdId(String url) {
-    final regExp = RegExp(
-      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
-      caseSensitive: false,
-      unicode: true,
-    );
-    final match = regExp.firstMatch(url);
-    return match?.group(1);
-  }
+class _InlineVideoAdCardState extends State<InlineVideoAdCard> {
+  VideoPlayerController? _videoController;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
     String url = widget.adData['url'] ?? '';
-    if (url.contains('instagram.com')) {
-      isInstagram = true;
-    } else {
-      String? vidId = extractAdId(url);
-      _playerController = YoutubePlayerController.fromVideoId(
-        videoId: vidId ?? 'dQw4w9WgXcQ',
-        autoPlay: true,
-        params: const YoutubePlayerParams(
-          showControls: true,
-          showFullscreenButton: true,
-          strictRelatedVideos: true,
-        ),
-      );
+    bool isVideo = widget.adData['isVideo'] ?? false;
+    if (isVideo && url.isNotEmpty) {
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _isInitialized = true;
+            });
+            _videoController?.setLooping(true);
+            _videoController?.play();
+          }
+        });
     }
   }
 
   @override
   void dispose() {
-    if (!isInstagram) {
-      _playerController.close();
-    }
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -1918,109 +1735,114 @@ class _AdFullScreenViewState extends State<AdFullScreenView> {
   Widget build(BuildContext context) {
     String url = widget.adData['url'] ?? '';
     bool isVideo = widget.adData['isVideo'] ?? false;
+    bool isInstagram = url.contains('instagram.com');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('عرض الإعلان 📢'),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: isInstagram
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.video_library_rounded, color: Color(0xFFE52521), size: 70),
-                    const SizedBox(height: 16),
-                    const Text('إعلان إنستغرام (ريلز / صفحة)', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-                      icon: const Icon(Icons.open_in_new, color: Colors.white),
-                      label: const Text('زيارة صفحة انستغرام', style: TextStyle(color: Colors.white, fontSize: 16)),
-                      onPressed: () async {
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      },
-                    ),
-                  ],
-                )
-              : (isVideo
-                  ? SecureYouTubePlayer(controller: _playerController)
-                  : CachedNetworkImage(imageUrl: url, fit: BoxFit.contain)),
-        ),
-      ),
-    );
-  }
-}
-
-class CourseYouTubePlayerWidget extends StatefulWidget {
-  final String videoUrlOrId;
-  const CourseYouTubePlayerWidget({super.key, required this.videoUrlOrId});
-
-  @override
-  State<CourseYouTubePlayerWidget> createState() => _CourseYouTubePlayerWidgetState();
-}
-
-class _CourseYouTubePlayerWidgetState extends State<CourseYouTubePlayerWidget> {
-  late YoutubePlayerController _playerController;
-
-  String extractVideoId(String url) {
-    final regExp = RegExp(
-      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
-      caseSensitive: false,
-      unicode: true,
-    );
-    final match = regExp.firstMatch(url);
-    return match?.group(1) ?? url;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    String vidId = extractVideoId(widget.videoUrlOrId);
-    _playerController = YoutubePlayerController.fromVideoId(
-      videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
-      autoPlay: false,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        strictRelatedVideos: true,
-      ),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant CourseYouTubePlayerWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.videoUrlOrId != widget.videoUrlOrId) {
-      _playerController.close();
-      String vidId = extractVideoId(widget.videoUrlOrId);
-      _playerController = YoutubePlayerController.fromVideoId(
-        videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
-        autoPlay: false,
-        params: const YoutubePlayerParams(
-          showControls: true,
-          showFullscreenButton: true,
-          strictRelatedVideos: true,
-        ),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _playerController.close();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      color: Colors.black,
-      child: SecureYouTubePlayer(controller: _playerController),
+      decoration: BoxDecoration(
+        color: const Color(0xFF181820),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE52521), width: 1.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (isVideo && _isInitialized && _videoController != null)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (_videoController!.value.isPlaying) {
+                          _videoController!.pause();
+                        } else {
+                          _videoController!.play();
+                        }
+                      });
+                    },
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: _videoController!.value.size.width,
+                        height: _videoController!.value.size.height,
+                        child: VideoPlayer(_videoController!),
+                      ),
+                    ),
+                  )
+                else if (isInstagram)
+                  Container(
+                    color: Colors.purple.shade900,
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.video_library_rounded, color: Colors.white, size: 36),
+                        SizedBox(height: 4),
+                        Text('إعلان إنستغرام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    color: Colors.black87,
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.play_circle_fill_rounded, color: Color(0xFFE52521), size: 45),
+                        SizedBox(height: 4),
+                        Text('فيديو إعلاني', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE52521),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'إعلان مميز 📢',
+                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('إعلان برعاية المتجر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 32,
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isInstagram ? Colors.purple : const Color(0xFFE52521),
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () async {
+                      final uri = Uri.parse(url);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    child: Text(isInstagram ? 'زيارة انستغرام' : 'مشاهدة الإعلان', style: const TextStyle(fontSize: 11, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2047,16 +1869,14 @@ class ProductDetailsScreen extends StatefulWidget {
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   int quantity = 1;
-  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
 
   void _orderViaWhatsApp() async {
-    String recipientPhone = _phoneController.text.trim();
     String location = _locationController.text.trim();
 
-    if (recipientPhone.isEmpty || location.isEmpty) {
+    if (location.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء إدخال رقم هاتف المستلم ومكان التوصيل/الجامعة')),
+        const SnackBar(content: Text('الرجاء إدخال مكان التوصيل أو الجامعة بالتفصيل')),
       );
       return;
     }
@@ -2079,7 +1899,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         "• العدد: $quantity قطع\n"
         "• السعر الإجمالي: $totalPrice $currency\n"
         "• اسم الزبون: ${widget.userName}\n"
-        "• هاتف المستلم: $recipientPhone\n"
+        "• هاتف الزبون: ${widget.userPhone}\n"
         "• مكان التوصيل/الجامعة: $location";
 
     String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(orderMsg)}';
@@ -2234,17 +2054,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ],
             ),
             const SizedBox(height: 16),
-
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'رقم هاتف المستلم',
-                prefixIcon: Icon(Icons.phone, color: Color(0xFFE52521)),
-                filled: true,
-              ),
-            ),
-            const SizedBox(height: 14),
 
             TextField(
               controller: _locationController,
@@ -2497,9 +2306,9 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                           child: ClipRRect(
                             borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
                             child: Image.asset(
-                              'assets/icon/icon.jpg',
+                              'assets/images/university.jpg',
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.school, color: Color(0xFFE52521), size: 40),
+                              errorBuilder: (context, error, stackTrace) => Image.asset('assets/icon/icon.jpg', fit: BoxFit.cover),
                             ),
                           ),
                         ),
@@ -2555,7 +2364,6 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
               itemCount: colleges.length,
               itemBuilder: (context, index) {
                 String college = colleges[index];
-                String imgUrl = collegeImages[college] ?? 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=500';
 
                 return GestureDetector(
                   onTap: () => setState(() => selectedCollege = college),
@@ -2571,11 +2379,10 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                         Expanded(
                           child: ClipRRect(
                             borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                            child: CachedNetworkImage(
-                              imageUrl: imgUrl, 
+                            child: Image.asset(
+                              'assets/images/university.jpg',
                               fit: BoxFit.cover,
-                              memCacheWidth: 200,
-                              memCacheHeight: 200,
+                              errorBuilder: (context, error, stackTrace) => Image.asset('assets/icon/icon.jpg', fit: BoxFit.cover),
                             ),
                           ),
                         ),
@@ -2734,105 +2541,72 @@ class CoursePlayerScreen extends StatefulWidget {
 }
 
 class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
-  String currentVideoUrl = '';
-
-  @override
-  void initState() {
-    super.initState();
-    var lectures = widget.course['lectures'] ?? [];
-    if (lectures.isNotEmpty) {
-      currentVideoUrl = lectures.first['url'] ?? '';
-    }
+  void _deleteCourse(String courseId) async {
+    // Helper to delete course
   }
 
   @override
   Widget build(BuildContext context) {
-    var lectures = widget.course['lectures'] ?? [];
+    var lectures = widget.course['lectures'] as List<dynamic>? ?? [];
     var coursePdfs = widget.course['pdfs'] as List<dynamic>? ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.course['title'] ?? '')),
+      appBar: AppBar(title: Text(widget.course['title'] ?? 'المقرر التعليمي')),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: MediaQuery.of(context).size.height * 0.38,
-            child: currentVideoUrl.isEmpty
-                ? const Center(child: Text('لا يوجد فيديو محدد للعرض', style: TextStyle(color: Colors.grey)))
-                : CourseYouTubePlayerWidget(videoUrlOrId: currentVideoUrl),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text('قائمة المحاضرات والدروس الآمنة 📚', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
           ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('قائمة المحاضرات والدروس الآمنة (يوتيوب غير مدرج):', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 13)),
-                if (widget.course['pdfUrl'] != null && widget.course['pdfUrl'].toString().isNotEmpty)
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 18),
-                    label: const Text('ملف PDF للمقرر', style: TextStyle(color: Colors.white, fontSize: 11)),
-                    onPressed: () async {
-                      Uri pdfUri = Uri.parse(widget.course['pdfUrl']);
-                      if (await canLaunchUrl(pdfUri)) {
-                        await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
-                      }
-                    },
-                  ),
-              ],
+          if (widget.course['pdfUrl'] != null && widget.course['pdfUrl'].toString().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                label: const Text('فتح ملف PDF الرئيسي للمقرر', style: TextStyle(color: Colors.white)),
+                onPressed: () async {
+                  Uri pdfUri = Uri.parse(widget.course['pdfUrl']);
+                  if (await canLaunchUrl(pdfUri)) {
+                    await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
             ),
-          ),
-          const Divider(color: Colors.white24),
+          const Divider(color: Colors.white24, height: 20),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: lectures.length,
-              itemBuilder: (context, i) {
-                var lec = lectures[i];
-                return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 5),
-                  decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(14)),
-                  child: ListTile(
-                    leading: CircleAvatar(backgroundColor: const Color(0xFFE52521), child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                    title: Text(lec['title'] ?? 'المحاضرة ${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (lec['pdfUrl'] != null && lec['pdfUrl'].toString().isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
-                            tooltip: 'فتح ملف PDF للمحاضرة',
-                            onPressed: () async {
-                              Uri pdfUri = Uri.parse(lec['pdfUrl']);
-                              if (await canLaunchUrl(pdfUri)) {
-                                await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
-                              }
-                            },
-                          ),
-                        if (widget.isAdmin)
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                            tooltip: 'حذف المحاضرة (أدمن)',
-                            onPressed: () async {
-                              setState(() {
-                                lectures.removeAt(i);
-                              });
-                              await FirebaseFirestore.instance.collection('courses').doc(widget.course['id']).update({
-                                'lectures': lectures,
-                              });
-                            },
-                          ),
-                      ],
-                    ),
-                    onTap: () {
-                      setState(() {
-                        currentVideoUrl = lec['url'] ?? '';
-                      });
+            child: lectures.isEmpty
+                ? const Center(child: Text('لا توجد محاضرات مضافة لهذا المقرر بعد', style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: lectures.length,
+                    itemBuilder: (context, i) {
+                      var lec = lectures[i];
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF2E2E3A))),
+                        child: ListTile(
+                          leading: CircleAvatar(backgroundColor: const Color(0xFFE52521), child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                          title: Text(lec['title'] ?? 'المحاضرة ${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          subtitle: const Text('اضغط للدخول إلى صفحة المحاضرة والفيديو وبنك الأسئلة 🎬', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFE52521), size: 16),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LectureDetailScreen(
+                                  course: widget.course,
+                                  initialLectureIndex: i,
+                                  isAdmin: widget.isAdmin,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
                     },
                   ),
-                );
-              },
-            ),
           ),
           if (coursePdfs.isNotEmpty)
             Container(
@@ -2841,11 +2615,11 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('قائمة بي دي اف المقرر والمحاضرات', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                  const Text('قائمة الملفات الإضافية وبنك الأسئلة العام', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 6),
                   ...coursePdfs.map((pdf) => ListTile(
                     leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
-                    title: Text(pdf['name'] ?? 'ملف PDF للمقرر', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    title: Text(pdf['name'] ?? 'ملف PDF', style: const TextStyle(color: Colors.white, fontSize: 13)),
                     onTap: () async {
                       Uri uri = Uri.parse(pdf['url']);
                       if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -2856,6 +2630,207 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class LectureDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> course;
+  final int initialLectureIndex;
+  final bool isAdmin;
+
+  const LectureDetailScreen({
+    super.key,
+    required this.course,
+    required this.initialLectureIndex,
+    required this.isAdmin,
+  });
+
+  @override
+  State<LectureDetailScreen> createState() => _LectureDetailScreenState();
+}
+
+class _LectureDetailScreenState extends State<LectureDetailScreen> {
+  late int currentIndex;
+  late List lectures;
+
+  @override
+  void initState() {
+    super.initState();
+    currentIndex = widget.initialLectureIndex;
+    lectures = widget.course['lectures'] ?? [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var lec = lectures[currentIndex] ?? {};
+    String title = lec['title'] ?? 'المحاضرة ${currentIndex + 1}';
+    String url = lec['url'] ?? '';
+    String pdfUrl = lec['pdfUrl'] ?? '';
+    String questionBankUrl = lec['questionBankUrl'] ?? '';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          if (currentIndex > 0)
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
+              tooltip: 'المحاضرة السابقة',
+              onPressed: () => setState(() => currentIndex--),
+            ),
+          if (currentIndex < lectures.length - 1)
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
+              tooltip: 'المحاضرة التالية',
+              onPressed: () => setState(() => currentIndex++),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 240,
+              child: url.isEmpty
+                  ? const Center(child: Text('لا يوجد فيديو لهذه المحاضرة', style: TextStyle(color: Colors.grey)))
+                  : CourseYouTubePlayerWidget(videoUrlOrId: url),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: currentIndex > 0 ? const Color(0xFF1E1E28) : Colors.grey.shade800,
+                  ),
+                  onPressed: currentIndex > 0 ? () => setState(() => currentIndex--) : null,
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                  label: const Text('المحاضرة السابقة', style: TextStyle(fontSize: 12)),
+                ),
+                Text('محاضرة ${currentIndex + 1} من ${lectures.length}', style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: currentIndex < lectures.length - 1 ? const Color(0xFF1E1E28) : Colors.grey.shade800,
+                  ),
+                  onPressed: currentIndex < lectures.length - 1 ? () => setState(() => currentIndex++) : null,
+                  label: const Text('التالية', style: TextStyle(fontSize: 12)),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                ),
+              ],
+            ),
+            const Divider(color: Colors.white24, height: 35),
+            const Text('مستلزمات المحاضرة والامتحانات 📚', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 12),
+            Card(
+              color: const Color(0xFF14141C),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ListTile(
+                leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 32),
+                title: const Text('ملف PDF للمحاضرة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text(pdfUrl.isNotEmpty ? 'متاح للتحميل والدراسة' : 'غير متوفر حالياً', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: pdfUrl.isNotEmpty ? const Color(0xFFE52521) : Colors.grey),
+                  onPressed: pdfUrl.isNotEmpty ? () async {
+                    Uri uri = Uri.parse(pdfUrl);
+                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } : null,
+                  child: const Text('فتح PDF', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              color: const Color(0xFF14141C),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ListTile(
+                leading: const Icon(Icons.quiz_rounded, color: Colors.amberAccent, size: 32),
+                title: const Text('بنك الأسئلة ونماذج الامتحانات 📝', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text(questionBankUrl.isNotEmpty ? 'متاح للتدريب ونماذج الامتحانات' : 'غير متوفر حالياً', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: questionBankUrl.isNotEmpty ? Colors.green : Colors.grey),
+                  onPressed: questionBankUrl.isNotEmpty ? () async {
+                    Uri uri = Uri.parse(questionBankUrl);
+                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } : null,
+                  child: const Text('بنك الأسئلة', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CourseYouTubePlayerWidget extends StatefulWidget {
+  final String videoUrlOrId;
+  const CourseYouTubePlayerWidget({super.key, required this.videoUrlOrId});
+
+  @override
+  State<CourseYouTubePlayerWidget> createState() => _CourseYouTubePlayerWidgetState();
+}
+
+class _CourseYouTubePlayerWidgetState extends State<CourseYouTubePlayerWidget> {
+  late YoutubePlayerController _playerController;
+
+  String extractVideoId(String url) {
+    final regExp = RegExp(
+      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+      caseSensitive: false,
+      unicode: true,
+    );
+    final match = regExp.firstMatch(url);
+    return match?.group(1) ?? url;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    String vidId = extractVideoId(widget.videoUrlOrId);
+    _playerController = YoutubePlayerController.fromVideoId(
+      videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
+      autoPlay: false,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+        strictRelatedVideos: true,
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant CourseYouTubePlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrlOrId != widget.videoUrlOrId) {
+      _playerController.close();
+      String vidId = extractVideoId(widget.videoUrlOrId);
+      _playerController = YoutubePlayerController.fromVideoId(
+        videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
+        autoPlay: false,
+        params: const YoutubePlayerParams(
+          showControls: true,
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _playerController.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black,
+      child: SecureYouTubePlayer(controller: _playerController),
     );
   }
 }
@@ -2894,6 +2869,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final _adUrlController = TextEditingController();
   bool _isAdVideo = false;
   bool _isAdActive = true;
+  bool _isUploadingAdVideo = false;
 
   final _courseTitleController = TextEditingController();
   final _coursePriceController = TextEditingController();
@@ -2903,7 +2879,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String selectedCollegeForCourse = 'هندسة معلوماتية';
   
   var lectureControllers = [
-    {'title': TextEditingController(text: 'المحاضرة الأولى'), 'url': TextEditingController(), 'pdf': ''}
+    {
+      'title': TextEditingController(text: 'المحاضرة الأولى'), 
+      'url': TextEditingController(), 
+      'pdf': '', 
+      'questionBank': '',
+      'isUploadingPdf': false,
+      'isUploadingQB': false,
+    }
   ];
 
   final TextEditingController _customCodeController = TextEditingController();
@@ -2991,7 +2974,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _pickAndUploadImage({required bool isBundle}) async {
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
       if (image == null) return;
 
       setState(() {
@@ -3014,7 +2997,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         uploadTask = ref.putFile(file);
       }
 
-      TaskSnapshot snapshot = await uploadTask;
+      TaskSnapshot snapshot = await uploadTask.timeout(
+        const Duration(seconds: 40),
+        onTimeout: () => throw Exception('انتهت مهلة الرفع، الإنترنت ضعيف.'),
+      );
+
       String downloadUrl = await snapshot.ref.getDownloadURL();
 
       setState(() {
@@ -3029,7 +3016,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم رفع الصورة بنجاح وتخزينها الدائم على فايربيز! ✅')),
+        const SnackBar(content: Text('تم رفع الصورة بنجاح وتخزينها على فايربيز! ✅')),
       );
     } catch (e) {
       setState(() {
@@ -3038,8 +3025,87 @@ class _AdminDashboardState extends State<AdminDashboard> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل رفع الصورة: $e')),
+        SnackBar(content: Text('فشل الرفع: تأكد من الإنترنت أو حجم الملف ($e)')),
       );
+    }
+  }
+
+  Future<void> _pickAndUploadAdVideo() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
+      if (video == null) return;
+
+      setState(() {
+        _isUploadingAdVideo = true;
+      });
+
+      String fileName = 'ads/${DateTime.now().millisecondsSinceEpoch}.mp4';
+      Reference ref = FirebaseStorage.instance.ref().child(fileName);
+
+      UploadTask uploadTask;
+      if (kIsWeb) {
+        Uint8List bytes = await video.readAsBytes();
+        uploadTask = ref.putData(bytes);
+      } else {
+        File file = File(video.path);
+        uploadTask = ref.putFile(file);
+      }
+
+      TaskSnapshot snapshot = await uploadTask.timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw Exception('انتهت مهلة رفع الفيديو، الإنترنت ضعيف.'),
+      );
+
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      setState(() {
+        _adUrlController.text = downloadUrl;
+        _isAdVideo = true;
+        _isUploadingAdVideo = false;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم رفع فيديو الإعلان بنجاح وتخزينه على فايربيز! 🎬')),
+      );
+    } catch (e) {
+      setState(() {
+        _isUploadingAdVideo = false;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل رفع الفيديو: $e')),
+      );
+    }
+  }
+
+  Future<String?> _pickAndUploadPdf(String folder) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (result == null || (result.files.single.path == null && result.files.single.bytes == null)) return null;
+
+      String fileName = '$folder/${DateTime.now().millisecondsSinceEpoch}.pdf';
+      Reference ref = FirebaseStorage.instance.ref().child(fileName);
+
+      UploadTask uploadTask;
+      if (kIsWeb) {
+        uploadTask = ref.putData(result.files.single.bytes!);
+      } else {
+        uploadTask = ref.putFile(File(result.files.single.path!));
+      }
+
+      TaskSnapshot snapshot = await uploadTask.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw Exception('انتهت مهلة رفع ملف الـ PDF.'),
+      );
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      debugPrint("PDF Upload error: $e");
+      return null;
     }
   }
 
@@ -3047,13 +3113,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     await FirebaseFirestore.instance.collection('settings').doc('app_config').set({
       'whatsapp': _whatsappController.text.trim(),
     }, SetOptions(merge: true));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث رقم الواتساب بنجاح لجميع طلبات المتجر والكورسات! 📱')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث رقم الواتساب بنجاح! 📱')));
   }
 
   void _saveAdBanner() async {
     String url = _adUrlController.text.trim();
     if (url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال رابط الإعلان')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال رابط أو رفع فيديو الإعلان')));
       return;
     }
     await FirebaseFirestore.instance.collection('ads').doc('main_banner').set({
@@ -3069,8 +3135,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _adUrlController.clear();
     setState(() {
       _isAdActive = false;
+      _isAdVideo = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الإعلان نهائياً وعادت الأمور لطبيعتها')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الإعلان نهائياً')));
   }
 
   void _sendFcmBroadcast() async {
@@ -3091,41 +3158,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _notifTitleController.clear();
     _notifBodyController.clear();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار العام بنجاح لجميع المستخدمين! 🚀')));
-  }
-
-  void _inputPdfUrlDialog(Function(String) onUploaded) {
-    final pdfController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF14141C),
-          title: const Text('إدخال رابط ملف PDF 📄', style: TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.bold)),
-          content: TextField(
-            controller: pdfController,
-            decoration: const InputDecoration(
-              labelText: 'رابط ملف PDF على فايربيز (Firebase Storage)',
-              filled: true,
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () {
-                if (pdfController.text.trim().isNotEmpty) {
-                  onUploaded(pdfController.text.trim());
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم إرفاق رابط ملف PDF بنجاح! ✅')),
-                  );
-                }
-              },
-              child: const Text('حفظ وإرفاق'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _saveProduct() async {
@@ -3192,7 +3224,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _bundleDescController.clear();
     _bundleImageUrl = '';
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر العرض/الباكدج بنجاح في قسم العروض!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر العرض/الباكدج بنجاح!')));
   }
 
   void _saveCourse() async {
@@ -3203,17 +3235,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
       String title = (lec['title'] as TextEditingController).text.trim();
       String url = (lec['url'] as TextEditingController).text.trim();
       String pdf = lec['pdf'] as String;
+      String qb = lec['questionBank'] as String;
       if (url.isNotEmpty) {
         lecturesList.add({
           'title': title.isNotEmpty ? title : 'محاضرة',
           'url': url,
           'pdfUrl': pdf,
+          'questionBankUrl': qb,
         });
       }
     }
 
     if (lecturesList.isEmpty) {
-      lecturesList.add({'title': 'المحاضرة الأولى', 'url': '', 'pdfUrl': ''});
+      lecturesList.add({'title': 'المحاضرة الأولى', 'url': '', 'pdfUrl': '', 'questionBankUrl': ''});
     }
 
     int priceNum = int.tryParse(_coursePriceController.text) ?? 25000;
@@ -3257,7 +3291,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _coursePdfUrl = '';
     setState(() {
       lectureControllers = [
-        {'title': TextEditingController(text: 'المحاضرة الأولى'), 'url': TextEditingController(), 'pdf': ''}
+        {
+          'title': TextEditingController(text: 'المحاضرة الأولى'), 
+          'url': TextEditingController(), 
+          'pdf': '', 
+          'questionBank': '',
+          'isUploadingPdf': false,
+          'isUploadingQB': false,
+        }
       ];
     });
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر المقرر، توليد 2000 كود تفعيل، وإرسال الإشعار بنجاح!')));
@@ -3724,54 +3765,97 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(_coursePdfUrl.isEmpty ? 'لم يتم إدخال رابط PDF للمقرر' : 'تم إدخال رابط PDF الرئيسي ✅', style: const TextStyle(color: Colors.white70)),
+                    child: Text(_coursePdfUrl.isEmpty ? 'لم يتم اختيار ملف PDF الرئيسي' : 'تم اختيار ملف PDF الرئيسي ✅', style: const TextStyle(color: Colors.white70)),
                   ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
-                    icon: const Icon(Icons.link, color: Color(0xFFE52521)),
-                    label: const Text('إدخال رابط PDF للمقرر', style: TextStyle(color: Colors.white)),
-                    onPressed: () => _inputPdfUrlDialog((url) => setState(() => _coursePdfUrl = url)),
+                    icon: const Icon(Icons.upload_file, color: Color(0xFFE52521)),
+                    label: const Text('رفع PDF للمقرر', style: TextStyle(color: Colors.white)),
+                    onPressed: () async {
+                      String? url = await _pickAndUploadPdf('courses_pdfs');
+                      if (url != null) {
+                        setState(() => _coursePdfUrl = url);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفع ملف PDF بنجاح!')));
+                      }
+                    },
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              const Text('إدارة المحاضرات (روابط يوتيوب غير مدرجة - Unlisted):', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+              const Text('إدارة المحاضرات (روابط يوتيوب غير مدرجة + ملفات PDF وبنك الأسئلة):', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               ...lectureControllers.asMap().entries.map((entry) {
                 int idx = entry.key;
                 var lec = entry.value;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: TextField(controller: lec['title'] as TextEditingController, decoration: InputDecoration(labelText: 'عنوان المحاضرة ${idx + 1}', filled: true))),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: lec['url'] as TextEditingController,
-                              decoration: InputDecoration(
-                                labelText: 'رابط يوتيوب غير مدرج ${idx + 1}',
-                                filled: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: const Color(0xFF14141C), borderRadius: BorderRadius.circular(16)),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: TextField(controller: lec['title'] as TextEditingController, decoration: InputDecoration(labelText: 'عنوان المحاضرة ${idx + 1}', filled: true))),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: lec['url'] as TextEditingController,
+                                decoration: InputDecoration(
+                                  labelText: 'رابط يوتيوب غير مدرج ${idx + 1}',
+                                  filled: true,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(child: Text((lec['pdf'] as String).isEmpty ? 'لا يوجد PDF' : 'تم إرفاق رابط PDF ✅', style: const TextStyle(color: Colors.grey, fontSize: 12))),
-                          TextButton.icon(
-                            icon: const Icon(Icons.link, color: Color(0xFFE52521)),
-                            label: const Text('إدخال رابط PDF للمحاضرة', style: TextStyle(color: Color(0xFFE52521))),
-                            onPressed: () => _inputPdfUrlDialog((url) => setState(() => lec['pdf'] = url)),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text((lec['pdf'] as String).isEmpty ? 'لا يوجد PDF محاضرة' : 'تم رفع PDF المحاضرة ✅', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                            ),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                              icon: const Icon(Icons.upload_file, color: Colors.redAccent, size: 16),
+                              label: Text((lec['isUploadingPdf'] == true) ? 'جاري الرفع...' : 'رفع PDF محاضرة', style: const TextStyle(fontSize: 11)),
+                              onPressed: (lec['isUploadingPdf'] == true) ? null : () async {
+                                setState(() => lec['isUploadingPdf'] = true);
+                                String? url = await _pickAndUploadPdf('lectures_pdfs');
+                                setState(() {
+                                  lec['isUploadingPdf'] = false;
+                                  if (url != null) lec['pdf'] = url;
+                                });
+                                if (url != null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفع ملف المحاضرة بنجاح!')));
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text((lec['questionBank'] as String).isEmpty ? 'لا يوجد بنك أسئلة' : 'تم رفع بنك الأسئلة ✅', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                            ),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E1E28)),
+                              icon: const Icon(Icons.quiz, color: Colors.amberAccent, size: 16),
+                              label: Text((lec['isUploadingQB'] == true) ? 'جاري الرفع...' : 'رفع بنك الأسئلة PDF', style: const TextStyle(fontSize: 11)),
+                              onPressed: (lec['isUploadingQB'] == true) ? null : () async {
+                                setState(() => lec['isUploadingQB'] = true);
+                                String? url = await _pickAndUploadPdf('question_banks');
+                                setState(() {
+                                  lec['isUploadingQB'] = false;
+                                  if (url != null) lec['questionBank'] = url;
+                                });
+                                if (url != null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفع بنك الأسئلة بنجاح!')));
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }),
@@ -3782,6 +3866,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       'title': TextEditingController(text: 'المحاضرة ${lectureControllers.length + 1}'),
                       'url': TextEditingController(),
                       'pdf': '',
+                      'questionBank': '',
+                      'isUploadingPdf': false,
+                      'isUploadingQB': false,
                     });
                   });
                 },
@@ -3893,7 +3980,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                                     aCode['isDisabled'] = true;
                                                     await FirebaseFirestore.instance.collection('courses').doc(courseDoc.id).update({'codes': codes});
                                                     setState(() {});
-                                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعطيل هذا الكود وإلغاء تفعيله! 🚫')));
+                                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعطيل هذا الكود وإلغاء تفعليه! 🚫')));
                                                   },
                                                   child: const Text('تعطيل', style: TextStyle(color: Colors.white, fontSize: 11)),
                                                 ),
@@ -4336,12 +4423,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               const Text('إدارة الإعلان (يظهر كبطاقة منتج أول شبكة المتجر)', style: TextStyle(color: Color(0xFFE52521), fontSize: 18, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
-              const Text('ضع رابط يوتيوب أو رابط إنستغرام (ريلز/صفحة) ليظهر تلقائياً كأول عنصر في المنتجات.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 20),
-              TextField(controller: _adUrlController, decoration: const InputDecoration(labelText: 'رابط الإعلان (يوتيوب أو إنستغرام)', filled: true)),
+              const Text('اختر فيديو الإعلان من استوديو هاتفك (.mp4) أو ضع رابط إنستغرام/يوتيوب ليعمل كأول عنصر بالمتجر.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                onPressed: _isUploadingAdVideo ? null : _pickAndUploadAdVideo,
+                icon: _isUploadingAdVideo 
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.video_library_rounded, color: Colors.white),
+                label: Text(_isUploadingAdVideo ? 'جاري رفع الفيديو لفايربيز...' : 'اختر فيديو الإعلان من الاستوديو 🎬', style: const TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 16),
+              TextField(controller: _adUrlController, decoration: const InputDecoration(labelText: 'رابط الإعلان أو رابط الفيديو المرفوع', filled: true)),
               const SizedBox(height: 12),
               SwitchListTile(
-                title: const Text('هل الإعلان عبارة عن فيديو (يوتيوب أو ريلز انستا)؟', style: TextStyle(color: Colors.white)),
+                title: const Text('هل الإعلان عبارة عن فيديو مباشر (MP4)؟', style: TextStyle(color: Colors.white)),
                 value: _isAdVideo,
                 activeColor: const Color(0xFFE52521),
                 onChanged: (val) => setState(() => _isAdVideo = val),
@@ -4412,6 +4508,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       default:
         return const Center(child: Text('عذراً، لا تمتلك صلاحية عرض هذا القسم', style: TextStyle(color: Colors.grey)));
+      }
     }
-  }
 }

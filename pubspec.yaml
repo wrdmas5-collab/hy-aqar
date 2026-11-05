@@ -23,6 +23,7 @@ dependencies:
   video_player: ^2.8.6
   firebase_storage: ^12.3.0
   image_picker: ^1.1.2
+  file_picker: ^8.0.5
 
 dev_dependencies:
   flutter_test:
@@ -41,3 +42,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/icon.jpg
+    - assets/images/university.jpg
