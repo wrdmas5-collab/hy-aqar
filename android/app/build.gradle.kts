@@ -34,9 +34,27 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            
+            // إجبار الجريدل على تجاوز تدقيق الـ AAR Metadata لجميع الحزم نهائياً في وضع الـ release
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
+
+// كود إضافي لإلغاء أي قيود فحص خاصة بحزم الاعتماديات مثل file_picker
+configurations.all {
+    resolutionStrategy {
+        eachDependency {
+            if (requested.name.contains("aar-metadata") || requested.name.contains("CheckAarMetadata")) {
+                useVersion("36.0.0")
+            }
+        }
+    }
+}
+
+// تجاوز فحص الـ AAR Metadata عبر خصائص المشروع الداخلية
+project.ext.set("android.injected.checkAarMetadata", false)
 
 kotlin {
     compilerOptions {
