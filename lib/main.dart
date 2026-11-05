@@ -1540,6 +1540,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                         width: double.infinity,
                                         memCacheWidth: 300,
                                         memCacheHeight: 300,
+                                        errorWidget: (context, url, error) => Container(
+                                          color: Colors.grey.shade900,
+                                          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                                        ),
                                       ),
                                     ),
                                     if (discountBadge != null && discountBadge.isNotEmpty)
@@ -2189,6 +2193,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   fit: BoxFit.cover,
                   memCacheWidth: 600,
                   memCacheHeight: 600,
+                  errorWidget: (context, url, error) => Container(
+                    height: 250,
+                    color: Colors.grey.shade900,
+                    child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)),
+                  ),
                 ),
               ),
             ),
