@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.hyacademy.hy_academy_store"
-    compileSdk = 36
+    compileSdk = 34
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,7 +16,7 @@ android {
     defaultConfig {
         applicationId = "com.hyacademy.hy_academy_store"
         minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -38,8 +38,4 @@ kotlin {
 
 flutter {
     source = "../.."
-}
-
-tasks.withType<com.android.build.gradle.internal.tasks.CheckAarMetadataTask>().configureEach {
-    enabled = false
 }
