@@ -997,24 +997,6 @@ List globalUniversities = [
   'جامعة الحواش الخاصة (HPU)',
 ];
 
-Map universityLogos = {
-  'جامعة دمشق': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fdamascus.png?alt=media',
-  'جامعة حلب': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Faleppo.png?alt=media',
-  'جامعة تشرين': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Ftishreen.jpg?alt=media',
-  'جامعة الفرات': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Falfurat.png?alt=media',
-  'جامعة حمص': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fhoms.webp?alt=media',
-  'جامعة اليرموك الخاصة': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fyarmouk.png?alt=media',
-  'الجامعة العربية الدولية (AIU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Faiu.webp?alt=media',
-  'الجامعة الدولية الخاصة للعلوم والتكنولوجيا (IUST)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fiust.webp?alt=media',
-  'جامعة الاتحاد الخاصة (IPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fipu.jpg?alt=media',
-  'جامعة الجزيرة الخاصة (JPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fjpu.jpg?alt=media',
-  'الجامعة البريطانية في دمشق (BUD)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fbud.jpg?alt=media',
-  'جامعة قاسيون الخاصة (QPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fqpu.jpg?alt=media',
-  'جامعة القلمون الخاصة': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fkalamoon.webp?alt=media',
-  'الجامعة السورية الخاصة (ASPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Faspu.webp?alt=media',
-  'جامعة الحواش الخاصة (HPU)': 'https://firebasestorage.googleapis.com/v0/b/hy-aqar.firebasestorage.app/o/uni_logos%2Fhawash.webp?alt=media',
-};
-
 Map universityColleges = {
   'جامعة دمشق': ['هندسة مدنية', 'هندسة معلوماتية', 'هندسة ديكور', 'هندسة عمارة', 'طب بشري', 'طب أسنان'],
   'جامعة حلب': ['هندسة ميكانيكية', 'هندسة كهربائية', 'هندسة مدنية', 'طب بشري', 'هندسة عمارة'],
@@ -1239,8 +1221,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               "• هاتف الزبون: ${widget.userPhone}";
 
                           String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(orderMsg)}';
-                          if (await canLaunchUrl(Uri.parse(waUrl))) {
-                            await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+                          final uri = Uri.parse(waUrl);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          } else {
+                            debugPrint("Could not launch WhatsApp URL: $waUrl");
                           }
                           
                           Navigator.pop(context);
@@ -1660,7 +1645,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildAdGridCard(Map<String, dynamic> adData) {
     String url = adData['url'] ?? '';
-    bool isVideo = adData['isVideo'] ?? false;
     bool isInstagram = url.contains('instagram.com');
 
     return GestureDetector(
@@ -1678,6 +1662,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFE52521), width: 1.5),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1685,37 +1670,29 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: isInstagram
-                        ? Container(
-                            color: Colors.purple.shade900,
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.video_library_rounded, color: Colors.white, size: 40),
-                                SizedBox(height: 6),
-                                Text('إعلان إنستغرام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                              ],
-                            ),
-                          )
-                        : (isVideo 
-                            ? ClipRect(
-                                child: OverflowBox(
-                                  maxWidth: double.infinity,
-                                  maxHeight: double.infinity,
-                                  child: FittedBox(
-                                    fit: BoxFit.cover,
-                                    child: SizedBox(
-                                      width: 400,
-                                      height: 225,
-                                      child: MiniAdYouTubePlayer(videoUrl: url),
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)),
-                  ),
+                  isInstagram
+                      ? Container(
+                          color: Colors.purple.shade900,
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.video_library_rounded, color: Colors.white, size: 36),
+                              SizedBox(height: 4),
+                              Text('إعلان إنستغرام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          color: Colors.black87,
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.play_circle_fill_rounded, color: Color(0xFFE52521), size: 45),
+                              SizedBox(height: 4),
+                              Text('فيديو إعلاني', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                            ],
+                          ),
+                        ),
                   Positioned(
                     top: 6,
                     left: 6,
@@ -1726,7 +1703,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
-                        'إعلان مميز 📢',
+                        'إعلان 📢',
                         style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -1740,14 +1717,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('إعلان برعاية المتجر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   SizedBox(
-                    height: 28,
+                    height: 32,
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isInstagram ? Colors.purple : const Color(0xFFE52521),
                         padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () {
                         Navigator.push(
@@ -2105,8 +2083,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         "• مكان التوصيل/الجامعة: $location";
 
     String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(orderMsg)}';
-    if (await canLaunchUrl(Uri.parse(waUrl))) {
-      await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+    final uri = Uri.parse(waUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      debugPrint("Could not launch WhatsApp URL: $waUrl");
     }
 
     addAppNotification(
@@ -2393,8 +2374,9 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                       }
                       String message = 'أرغب بشراء كورس ($courseTitle) بسعر $coursePriceStr، أريد كود التفعيل.';
                       String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(message)}';
-                      if (await canLaunchUrl(Uri.parse(waUrl))) {
-                        await launchUrl(Uri.parse(waUrl), mode: LaunchMode.externalApplication);
+                      final uri = Uri.parse(waUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
                       }
                     },
                   ),
@@ -2499,7 +2481,6 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
               itemCount: globalUniversities.length,
               itemBuilder: (context, index) {
                 String uni = globalUniversities[index];
-                String uniLogo = universityLogos[uni] ?? 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=500';
 
                 return GestureDetector(
                   onTap: () => setState(() => selectedUni = uni),
@@ -2515,11 +2496,10 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                         Expanded(
                           child: ClipRRect(
                             borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                            child: CachedNetworkImage(
-                              imageUrl: uniLogo, 
+                            child: Image.asset(
+                              'assets/icon/icon.jpg',
                               fit: BoxFit.cover,
-                              memCacheWidth: 200,
-                              memCacheHeight: 200,
+                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.school, color: Color(0xFFE52521), size: 40),
                             ),
                           ),
                         ),
