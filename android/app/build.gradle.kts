@@ -40,8 +40,6 @@ flutter {
     source = "../.."
 }
 
-tasks.configureEach {
-    if (name.contains("CheckAarMetadata")) {
-        enabled = false
-    }
+tasks.withType<com.android.build.gradle.internal.tasks.CheckAarMetadataTask>().configureEach {
+    enabled = false
 }
