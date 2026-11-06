@@ -26,20 +26,14 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Android SDK 36, NDK and CMake
-        run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
-
       - name: Get Flutter dependencies
         run: flutter pub get
 
       - name: Generate Launcher Icons
-        run: flutter pub run flutter_launcher_icons:main
+        run: dart run flutter_launcher_icons
 
-      - name: Build Android APK
-        run: flutter build apk --release
+      - name: Build Android Universal APK
+        run: flutter build apk --release --split-per-abi=false
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
@@ -63,7 +57,7 @@ jobs:
         run: flutter pub get
 
       - name: Generate Launcher Icons
-        run: flutter pub run flutter_launcher_icons:main
+        run: dart run flutter_launcher_icons
 
       - name: Build iOS Release
         run: flutter build ios --release --no-codesign
