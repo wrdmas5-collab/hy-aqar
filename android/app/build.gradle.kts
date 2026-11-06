@@ -40,8 +40,10 @@ flutter {
     source = "../.."
 }
 
-tasks.configureEach {
-    if (name.contains("CheckAarMetadata")) {
-        enabled = false
+allprojects {
+    tasks.configureEach {
+        if (name.contains("CheckAarMetadata")) {
+            enabled = false
+        }
     }
 }
