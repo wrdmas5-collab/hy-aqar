@@ -21,11 +21,9 @@ subprojects {
 }
 
 subprojects {
-    afterEvaluate {
-        tasks.configureEach {
-            if (name.contains("CheckAarMetadata")) {
-                enabled = false
-            }
+    tasks.configureEach {
+        if (name.contains("CheckAarMetadata")) {
+            enabled = false
         }
     }
 }
