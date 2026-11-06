@@ -20,10 +20,12 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-subprojects {
-    tasks.configureEach {
-        if (name.contains("CheckAarMetadata")) {
-            enabled = false
+gradle.projectsEvaluated {
+    subprojects {
+        tasks.configureEach {
+            if (name.contains("AarMetadata")) {
+                enabled = false
+            }
         }
     }
 }
