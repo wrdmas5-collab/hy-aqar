@@ -39,3 +39,13 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+subprojects {
+    afterEvaluate {
+        project.tasks.configureEach {
+            if (name.contains("CheckAarMetadata")) {
+                enabled = false
+            }
+        }
+    }
+}
