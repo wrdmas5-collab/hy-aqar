@@ -21,8 +21,8 @@ android {
         applicationId = "com.example.hy_academy"
         minSdk = 21
         targetSdk = 36
-        versionCode = flutterVersionCode.toInt()
-        versionName = flutterVersionName
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     buildTypes {
