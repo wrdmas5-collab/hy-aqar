@@ -6,7 +6,8 @@ plugins {
 
 configure<com.android.build.api.dsl.ApplicationExtension> {
     namespace = "com.example.hy_academy"
-    compileSdk = 35
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -16,7 +17,7 @@ configure<com.android.build.api.dsl.ApplicationExtension> {
     defaultConfig {
         applicationId = "com.example.hy_academy"
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
