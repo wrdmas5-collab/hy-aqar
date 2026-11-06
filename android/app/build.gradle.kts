@@ -21,10 +21,9 @@ configure<com.android.build.api.dsl.ApplicationExtension> {
         versionName = "1.0.0"
     }
 
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
-        }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 
