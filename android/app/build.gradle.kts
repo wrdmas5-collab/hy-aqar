@@ -5,7 +5,7 @@ plugins {
 }
 
 configure<com.android.build.api.dsl.ApplicationExtension> {
-    namespace = "com.example.hy_academy"
+    namespace = "com.hyacademy.hy_academy_store"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -15,7 +15,7 @@ configure<com.android.build.api.dsl.ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "com.example.hy_academy"
+        applicationId = "com.hyacademy.hy_academy_store"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = 1
