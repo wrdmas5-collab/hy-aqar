@@ -26,6 +26,12 @@ configure<com.android.build.api.dsl.ApplicationExtension> {
         checkReleaseBuilds = false
         abortOnError = false
     }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
 }
 
 kotlin {
