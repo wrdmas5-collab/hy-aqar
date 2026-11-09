@@ -16,8 +16,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:image_picker/image_picker.dart';
+
+String? pendingResetOobCode;
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -25,8 +27,64 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
+void _showResetPasswordDialog(BuildContext context, String oobCode) {
+  final newPassCtrl = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF14141C),
+      title: const Text('إعادة تعيين كلمة المرور', style: TextStyle(color: Colors.white)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('أدخل كلمة السر الجديدة', style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: newPassCtrl,
+            obscureText: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              labelText: 'كلمة السر الجديدة',
+              labelStyle: TextStyle(color: Colors.white70),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+          onPressed: () async {
+            try {
+              await FirebaseAuth.instance.applyActionCode(oobCode);
+              if (!context.mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم إعادة تعيين كلمة المرور بنجاح ✅'), backgroundColor: Colors.green),
+              );
+            } on FirebaseAuthException catch (e) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('فشل: ${e.message}'), backgroundColor: Colors.redAccent),
+              );
+            }
+          },
+          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://myyblhbcrfjrvxqseshx.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15eWJsaGJjcmZqcnZ4cXNlc2h4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxNDkyMDksImV4cCI6MjEwOTcyNTIwOX0.DgJO8C3vCsbd1iwXRh2IjG9a0PSir8AUITNu7s9HkCg',
+  );
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -73,6 +131,16 @@ void main() async {
     debugPrint("Firebase initialization or FCM error: $e");
   }
 
+  // Handle password reset deep link (from email) on web/mobile
+  pendingResetOobCode = null;
+  if (kIsWeb) {
+    final uri = Uri.base;
+    final params = uri.queryParameters;
+    if (params['mode'] == 'resetPassword' && params['oobCode'] != null) {
+      pendingResetOobCode = params['oobCode']!;
+    }
+  }
+
   final prefs = await SharedPreferences.getInstance();
   bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
   String savedName = prefs.getString('user_name') ?? '';
@@ -88,6 +156,7 @@ void main() async {
     initialUid: savedUid,
     initialIsAdmin: savedIsAdmin,
     initialAdminPerms: savedAdminPerms,
+    pendingResetOobCode: pendingResetOobCode,
   ));
 }
 
@@ -98,6 +167,7 @@ class HyAcademyApp extends StatefulWidget {
   final String initialUid;
   final bool initialIsAdmin;
   final List<String> initialAdminPerms;
+  final String? pendingResetOobCode;
 
   const HyAcademyApp({
     super.key,
@@ -107,6 +177,7 @@ class HyAcademyApp extends StatefulWidget {
     required this.initialUid,
     required this.initialIsAdmin,
     required this.initialAdminPerms,
+    this.pendingResetOobCode,
   });
 
   @override
@@ -117,6 +188,14 @@ class HyAcademyApp extends StatefulWidget {
 
 class _HyAcademyAppState extends State<HyAcademyApp> {
   bool isDarkMode = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pendingResetOobCode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showResetPasswordDialog(context, widget.pendingResetOobCode!));
+    }
+  }
 
   void toggleTheme() {
     setState(() {
@@ -858,23 +937,38 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 20),
 
-                              SizedBox(
-                                height: 54,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white,
-                                    foregroundColor: Colors.black87,
-                                    elevation: 4,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                                  ),
-                                  onPressed: _loginWithGoogle,
-                                  icon: const Icon(Icons.g_mobiledata, color: Color(0xFFE52521), size: 32),
-                                  label: const Text(
-                                    'تسجيل الدخول عبر جوجل',
-                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                SizedBox(
+                                  height: 54,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: Colors.black87,
+                                      elevation: 4,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    ),
+                                    onPressed: _loginWithGoogle,
+                                    icon: const Icon(Icons.g_mobiledata, color: Color(0xFFE52521), size: 32),
+                                    label: const Text(
+                                      'تسجيل الدخول عبر جوجل',
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 12),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const ForgotPasswordScreen(),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    'نسيت كلمة المرور؟',
+                                    style: TextStyle(color: Color(0xFFE52521), fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -916,6 +1010,137 @@ class _LoginScreenState extends State<LoginScreen> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFFE52521), width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({super.key});
+
+  @override
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _emailController = TextEditingController();
+  bool _isSending = false;
+
+  Future<void> _sendResetEmail() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرجاء إدخال بريد إلكتروني صحيح')),
+      );
+      return;
+    }
+    setState(() => _isSending = true);
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني ✅'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل الإرسال: ${e.message}'), backgroundColor: Colors.redAccent),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل الإرسال: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isDark = HyAcademyApp.of(context).isDarkMode;
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0F0F12) : const Color(0xFFF9F9FB),
+      appBar: AppBar(
+        title: const Text('استعادة كلمة المرور'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.email_outlined, size: 80, color: Color(0xFFE52521)),
+              const SizedBox(height: 20),
+              const Text(
+                'نسيت كلمة المرور؟',
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'أدخل بريدك الإلكتروني لإرسال رابط إعادة تعيين كلمة المرور',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 30),
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'البريد الإلكتروني',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  prefixIcon: const Icon(Icons.email_rounded, color: Color(0xFFE52521)),
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF1E1E28) : const Color(0xFFF0F0F5),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: isDark ? const Color(0xFF2E2E3E) : const Color(0xFFD4D4E0)),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFE52521), width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 54,
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSending ? null : _sendResetEmail,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE52521),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    elevation: 8,
+                    shadowColor: const Color(0x55E52521),
+                  ),
+                  child: _isSending
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text(
+                          'إرسال رابط الاستعادة',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('العودة لتسجيل الدخول', style: TextStyle(color: Colors.white70)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1263,6 +1488,82 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Scaffold(
+        drawer: Drawer(
+          backgroundColor: const Color(0xFF14141C),
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const DrawerHeader(
+                decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFE52521), Color(0xFF14141C)])),
+                child: Text('القائمة الجانبية', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: const Text('المواد المفعلة لدي', style: TextStyle(color: Color(0xFFE52521), fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+              ),
+              FutureBuilder<List<String>>(
+                future: SharedPreferences.getInstance().then((p) => p.getStringList('activated_courses_${widget.userUid}') ?? []),
+                builder: (context, snap) {
+                  List<String> activeIds = snap.data ?? [];
+                  if (activeIds.isEmpty) {
+                    return const ListTile(title: Text('لا توجد مواد مفعلة حالياً', style: TextStyle(color: Colors.grey)));
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: activeIds.map((cid) => FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance.collection('courses').doc(cid).get(),
+                      builder: (context, csnap) {
+                        if (!csnap.hasData || !csnap.data!.exists) return const SizedBox.shrink();
+                        var c = csnap.data!.data() as Map<String, dynamic>?;
+                        if (c == null) return const SizedBox.shrink();
+                        return ListTile(
+                          leading: const Icon(Icons.school_rounded, color: Colors.greenAccent, size: 22),
+                          title: Text(c['title'] ?? 'مقرر', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                          subtitle: Text(c['university'] ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                          trailing: const Icon(Icons.chevron_right, color: Colors.white54, size: 18),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CoursePlayerScreen(course: c, isAdmin: widget.isAdmin),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    )).toList(),
+                  );
+                },
+              ),
+              const Divider(color: Colors.white12, height: 30),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: const Text('المحملات (PDF)', style: TextStyle(color: Color(0xFFE52521), fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+              ),
+              FutureBuilder<List<String>>(
+                future: SharedPreferences.getInstance().then((p) => p.getStringList('downloaded_pdfs') ?? []),
+                builder: (context, snapshot) {
+                  List<String> list = snapshot.data ?? [];
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (list.isEmpty) const ListTile(title: Text('لا توجد ملفات محملة', style: TextStyle(color: Colors.grey))),
+                      ...list.map((u) => ListTile(
+                        leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                        title: Text(u.split('/').last, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () async {
+                          Uri uri = Uri.parse(u);
+                          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        },
+                      )),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
         appBar: AppBar(
           automaticallyImplyLeading: false,
           title: Row(
@@ -1360,21 +1661,21 @@ class _HomeScreenState extends State<HomeScreen> {
               scale: scale,
               child: Container(
                 width: double.infinity,
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF2E1A22), Color(0xFF14141C), Color(0xFF1F1218)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFE52521).withOpacity(0.6), width: 2),
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFFE52521).withOpacity(0.25),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -1383,19 +1684,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const Text(
                       'Welcome to hy Academy',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.8),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     const Text(
                       'كل ما يحتاجه الطالب الجامعي تجده هنا',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Text(
                       'أهلاً بك، ${widget.userName}',
                       style: const TextStyle(
                         color: Colors.amberAccent,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),
                       maxLines: 1,
@@ -1409,24 +1710,26 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
               hintText: 'ابحث عن منتج أو عرض في المتجر...',
-              prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE52521)),
+              prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE52521), size: 20),
               filled: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+              fillColor: const Color(0xFF1E1E28),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
             ),
             onChanged: (val) => setState(() => searchQuery = val.trim()),
           ),
         ),
 
         SizedBox(
-          height: 55,
+          height: 32,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             itemCount: globalCategories.length,
             itemBuilder: (context, index) {
               String cat = globalCategories[index];
@@ -1434,10 +1737,10 @@ class _HomeScreenState extends State<HomeScreen> {
               IconData icon = categoryIcons[cat] ?? Icons.category_rounded;
 
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: ChoiceChip(
-                  avatar: Icon(icon, color: isSelected ? Colors.white : const Color(0xFFE52521), size: 18),
-                  label: Text(cat),
+                  avatar: Icon(icon, color: isSelected ? Colors.white : const Color(0xFFE52521), size: 16),
+                  label: Text(cat, style: const TextStyle(fontSize: 12)),
                   selected: isSelected,
                   selectedColor: const Color(0xFFE52521),
                   labelStyle: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold),
@@ -1448,15 +1751,28 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
+        // Ad banner at top of store screen
+        StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('ads').doc('main_banner').snapshots(),
+          builder: (context, adSnapshot) {
+            if (!adSnapshot.hasData || !adSnapshot.data!.exists) return const SizedBox.shrink();
+            var adData = adSnapshot.data!.data() as Map<String, dynamic>?;
+            if (adData == null || (adData['isActive'] ?? false) != true) return const SizedBox.shrink();
+            String adUrl = adData['url'] ?? '';
+            if (adUrl.isEmpty) return const SizedBox.shrink();
+            return SizedBox(
+              height: 180,
+              child: InlineVideoAdCard(adData: adData),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: selectedCategory == 'العروض' 
-                ? FirebaseFirestore.instance.collection('bundles').limit(100).snapshots() 
-                : FirebaseFirestore.instance.collection('products').limit(100).snapshots(),
-            builder: (context, snapshot) {
-              return StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance.collection('ads').doc('main_banner').snapshots(),
-                builder: (context, adSnapshot) {
+                stream: selectedCategory == 'العروض' 
+                    ? FirebaseFirestore.instance.collection('bundles').limit(100).snapshots() 
+                    : FirebaseFirestore.instance.collection('products').limit(100).snapshots(),
+                builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
                   var docs = snapshot.data!.docs;
 
@@ -1470,20 +1786,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return matchCat && matchQuery;
                   }).toList();
 
-                  bool showAdInGrid = false;
-                  Map<String, dynamic>? adData;
-                  if (adSnapshot.hasData && adSnapshot.data!.exists) {
-                    adData = adSnapshot.data!.data() as Map<String, dynamic>?;
-                    if (adData != null && (adData['isActive'] ?? false) == true) {
-                      String adUrl = adData['url'] ?? '';
-                      if (adUrl.isNotEmpty) {
-                        showAdInGrid = true;
-                      }
-                    }
-                  }
-
-                  int totalGridCount = items.length + (showAdInGrid ? 1 : 0);
-                  if (totalGridCount == 0) return const Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey)));
+                  if (items.isEmpty) return const Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey)));
 
                   return GridView.builder(
                     padding: const EdgeInsets.all(16),
@@ -1493,14 +1796,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
-                    itemCount: totalGridCount,
+                    itemCount: items.length,
                     itemBuilder: (context, index) {
-                      if (showAdInGrid && index == 0) {
-                        return InlineVideoAdCard(adData: adData!);
-                      }
-
-                      int itemIndex = showAdInGrid ? index - 1 : index;
-                      var p = items[itemIndex];
+                      var p = items[index];
                       bool isFav = globalFavorites.contains(p['id']);
                       String? discountBadge = p['discountBadge'];
 
@@ -1649,14 +1947,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   );
                 },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
+              ),
+            ),
+          ],
+        );
+    }
   Widget _buildProfileTab() {
     return Center(
       child: Column(
@@ -1784,15 +2079,21 @@ class _InlineVideoAdCardState extends State<InlineVideoAdCard> {
                     ),
                   )
                 else
-                  Container(
-                    color: Colors.black87,
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.play_circle_fill_rounded, color: Color(0xFFE52521), size: 45),
-                        SizedBox(height: 4),
-                        Text('فيديو إعلاني', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                      ],
+                  CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.black87,
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.broken_image, color: Color(0xFFE52521), size: 45),
+                          SizedBox(height: 4),
+                          Text('صورة إعلانية', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                        ],
+                      ),
                     ),
                   ),
                 Positioned(
@@ -1925,6 +2226,61 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
+  void _editProduct() async {
+    final titleCtrl = TextEditingController(text: widget.product['title'] ?? '');
+    final priceCtrl = TextEditingController(text: (widget.product['priceNum'] ?? 0).toString());
+    final descCtrl = TextEditingController(text: widget.product['description'] ?? '');
+    final categoryCtrl = TextEditingController(text: widget.product['category'] ?? '');
+    String colName = widget.product['isBundle'] == true ? 'bundles' : 'products';
+    String imageUrl = widget.product['image'] ?? '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E28),
+        title: const Text('تعديل المنتج', style: TextStyle(color: Colors.white)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المنتج', labelStyle: TextStyle(color: Colors.white70), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)))),
+              const SizedBox(height: 10),
+              TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: 'السعر', labelStyle: TextStyle(color: Colors.white70), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent))), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+              const SizedBox(height: 10),
+              TextField(controller: categoryCtrl, decoration: const InputDecoration(labelText: 'القسم', labelStyle: TextStyle(color: Colors.white70), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)))),
+              const SizedBox(height: 10),
+              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'الوصف', labelStyle: TextStyle(color: Colors.white70), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent))), maxLines: 2),
+              const SizedBox(height: 10),
+              Text(imageUrl.isNotEmpty ? 'الصورة الحالية: $imageUrl' : 'لا توجد صورة', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+            onPressed: () async {
+              int priceNum = int.tryParse(priceCtrl.text.trim()) ?? 0;
+              String priceStr = priceNum.toString();
+              await FirebaseFirestore.instance.collection(colName).doc(widget.product['id']).update({
+                'title': titleCtrl.text.trim(),
+                'price': priceStr,
+                'priceNum': priceNum,
+                'category': categoryCtrl.text.trim(),
+                'description': descCtrl.text.trim(),
+              });
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المنتج بنجاح ✅')));
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _deleteProduct() async {
     showDialog(
       context: context,
@@ -1959,6 +2315,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       appBar: AppBar(
         title: Text(widget.product['title'] ?? 'تفاصيل المنتج'),
         actions: [
+          if (widget.isAdmin)
+            IconButton(
+              icon: const Icon(Icons.edit_rounded, color: Color(0xFFE52521)),
+              onPressed: _editProduct,
+              tooltip: 'تعديل المنتج',
+            ),
           if (widget.isAdmin)
             IconButton(
               icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
@@ -2222,7 +2584,11 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                 }
 
                 if (isValid || enteredCode == "123456") {
-                  try {
+  await Supabase.initialize(
+    url: 'https://myyblhbcrfjrvxqseshx.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15eWJsaGJjcmZqcnZ4cXNlc2h4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxNDkyMDksImV4cCI6MjEwOTcyNTIwOX0.DgJO8C3vCsbd1iwXRh2IjG9a0PSir8AUITNu7s9HkCg',
+  );
+  try {
                     if (matchedIndex != -1) {
                       codesList[matchedIndex]['isUsed'] = true;
                       codesList[matchedIndex]['usedBy'] = widget.userName;
@@ -2248,6 +2614,14 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                         'activatedAt': FieldValue.serverTimestamp(),
                       },
                     });
+                    try {
+                      final prefs = await SharedPreferences.getInstance();
+                      List<String> active = prefs.getStringList('activated_courses_${widget.userUid}') ?? [];
+                      if (!active.contains(course['id'])) {
+                        active.add(course['id']);
+                        await prefs.setStringList('activated_courses_${widget.userUid}', active);
+                      }
+                    } catch (_) {}
                   } catch (e) {
                     debugPrint("Error updating course unlock: $e");
                   }
@@ -2731,13 +3105,33 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
                 leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 32),
                 title: const Text('ملف PDF للمحاضرة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 subtitle: Text(pdfUrl.isNotEmpty ? 'متاح للتحميل والدراسة' : 'غير متوفر حالياً', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                trailing: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: pdfUrl.isNotEmpty ? const Color(0xFFE52521) : Colors.grey),
-                  onPressed: pdfUrl.isNotEmpty ? () async {
-                    Uri uri = Uri.parse(pdfUrl);
-                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  } : null,
-                  child: const Text('فتح PDF', style: TextStyle(fontSize: 12)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: pdfUrl.isNotEmpty ? const Color(0xFFE52521) : Colors.grey),
+                      onPressed: pdfUrl.isNotEmpty ? () async {
+                        Uri uri = Uri.parse(pdfUrl);
+                        if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      } : null,
+                      child: const Text('فتح PDF', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 6),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: pdfUrl.isNotEmpty ? Colors.green : Colors.grey),
+                      onPressed: pdfUrl.isNotEmpty ? () async {
+                        Uri uri = Uri.parse(pdfUrl);
+                        if (await canLaunchUrl(uri)) {
+                          final prefs = await SharedPreferences.getInstance();
+                          List<String> list = prefs.getStringList('downloaded_pdfs') ?? [];
+                          if (!list.contains(pdfUrl)) list.add(pdfUrl);
+                          await prefs.setStringList('downloaded_pdfs', list);
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } : null,
+                      child: const Text('تنزيل PDF', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -2986,23 +3380,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       });
 
       String fileName = 'products/${DateTime.now().millisecondsSinceEpoch}.jpg';
-      Reference ref = FirebaseStorage.instance.ref().child(fileName);
-
-      UploadTask uploadTask;
-      if (kIsWeb) {
-        Uint8List bytes = await image.readAsBytes();
-        uploadTask = ref.putData(bytes);
-      } else {
-        File file = File(image.path);
-        uploadTask = ref.putFile(file);
-      }
-
-      TaskSnapshot snapshot = await uploadTask.timeout(
-        const Duration(seconds: 40),
-        onTimeout: () => throw Exception('انتهت مهلة الرفع، الإنترنت ضعيف.'),
-      );
-
-      String downloadUrl = await snapshot.ref.getDownloadURL();
+      final bytes = await image.readAsBytes();
+      await Supabase.instance.client.storage.from('images').uploadBinary(fileName, bytes);
+      String downloadUrl = Supabase.instance.client.storage.from('images').getPublicUrl(fileName);
 
       setState(() {
         if (isBundle) {
@@ -3041,23 +3421,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       });
 
       String fileName = 'ads/${DateTime.now().millisecondsSinceEpoch}.mp4';
-      Reference ref = FirebaseStorage.instance.ref().child(fileName);
-
-      UploadTask uploadTask;
-      if (kIsWeb) {
-        Uint8List bytes = await video.readAsBytes();
-        uploadTask = ref.putData(bytes);
-      } else {
-        File file = File(video.path);
-        uploadTask = ref.putFile(file);
-      }
-
-      TaskSnapshot snapshot = await uploadTask.timeout(
-        const Duration(seconds: 90),
-        onTimeout: () => throw Exception('انتهت مهلة رفع الفيديو، الإنترنت ضعيف.'),
-      );
-
-      String downloadUrl = await snapshot.ref.getDownloadURL();
+      final bytes = await video.readAsBytes();
+      await Supabase.instance.client.storage.from('images').uploadBinary(fileName, bytes);
+      String downloadUrl = Supabase.instance.client.storage.from('images').getPublicUrl(fileName);
 
       setState(() {
         _adUrlController.text = downloadUrl;
@@ -3089,20 +3455,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (result == null || (result.files.single.path == null && result.files.single.bytes == null)) return null;
 
       String fileName = '$folder/${DateTime.now().millisecondsSinceEpoch}.pdf';
-      Reference ref = FirebaseStorage.instance.ref().child(fileName);
-
-      UploadTask uploadTask;
-      if (kIsWeb) {
-        uploadTask = ref.putData(result.files.single.bytes!);
+      Uint8List bytes;
+      if (result.files.single.bytes != null) {
+        bytes = result.files.single.bytes!;
       } else {
-        uploadTask = ref.putFile(File(result.files.single.path!));
+        bytes = await File(result.files.single.path!).readAsBytes();
       }
-
-      TaskSnapshot snapshot = await uploadTask.timeout(
-        const Duration(seconds: 60),
-        onTimeout: () => throw Exception('انتهت مهلة رفع ملف الـ PDF.'),
-      );
-      return await snapshot.ref.getDownloadURL();
+      await Supabase.instance.client.storage.from('images').uploadBinary(fileName, bytes);
+      return Supabase.instance.client.storage.from('images').getPublicUrl(fileName);
     } catch (e) {
       debugPrint("PDF Upload error: $e");
       return null;
