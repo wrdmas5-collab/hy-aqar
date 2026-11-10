@@ -1,18 +1,23 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:ui';
 import 'dart:math';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -20,6 +25,31 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:image_picker/image_picker.dart';
 
 String? pendingResetOobCode;
+bool bannerAutoPlay = true;
+
+Future<String?> downloadPdfToLocal(String url, String fileName) async {
+  try {
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode != 200) return null;
+
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsBytes(response.bodyBytes);
+
+    final prefs = await SharedPreferences.getInstance();
+    List<String> localPdfs = prefs.getStringList('local_pdfs') ?? [];
+    String entry = '$url|${file.path}|$fileName';
+    if (!localPdfs.contains(entry)) {
+      localPdfs.add(entry);
+      await prefs.setStringList('local_pdfs', localPdfs);
+    }
+
+    return file.path;
+  } catch (e) {
+    debugPrint("PDF Download error: $e");
+    return null;
+  }
+}
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -62,12 +92,12 @@ void _showResetPasswordDialog(BuildContext context, String oobCode) {
               if (!context.mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم إعادة تعيين كلمة المرور بنجاح ✅'), backgroundColor: Colors.green),
+                 const SnackBar(content: Text('تم إعادة تعيين كلمة المرور بنجاح ✅')),
               );
             } on FirebaseAuthException catch (e) {
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('فشل: ${e.message}'), backgroundColor: Colors.redAccent),
+                 SnackBar(content: Text('فشل: ${e.message}')),
               );
             }
           },
@@ -480,104 +510,53 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0, -0.3),
-                radius: 1.5,
-                colors: [Color(0xFF1F1F28), Color(0xFF0F0F12)],
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFE52521), width: 2),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x33E52521), blurRadius: 25, spreadRadius: 6),
+                ],
               ),
-            ),
-          ),
-          const BackgroundStickersLayer(),
-          Center(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: ScaleTransition(
-                scale: _scaleAnimation,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xFFE52521), Color(0xFFFF4D4D)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x55E52521),
-                            blurRadius: 45,
-                            spreadRadius: 12,
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/icon/icon.jpg',
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 80, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFFE52521), Color(0xFFFF7674)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(bounds),
-                      child: const Text(
-                        'hy Academy',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 30),
-                      child: Text(
-                        'المنصة التعليمية الشاملة ومستلزمات طلاب الجامعات',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(height: 50),
-                    const SizedBox(
-                      width: 35,
-                      height: 35,
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFE52521),
-                        strokeWidth: 3,
-                      ),
-                    ),
-                  ],
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/icon/icon.jpg',
+                  width: 55,
+                  height: 55,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.school_rounded, size: 55, color: Color(0xFFE52521)),
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 24),
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFFE52521), Color(0xFFFF7674)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: const Text(
+                'hy Academy',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const CircularProgressIndicator(color: Color(0xFFE52521)),
+          ],
+        ),
       ),
     );
   }
@@ -594,6 +573,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController(text: '+963');
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  bool _isSignUp = false;
 
   final String adminPhone = "+963967834966";
   final String adminPass = "81644936";
@@ -617,23 +597,140 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  void _recordNewUserLogin(String name, String phone, String uid, bool isAdmin) async {
+  void _recordNewUserLogin(String name, String phone, String uid, bool isAdmin, {String? email}) async {
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': name,
         'phone': phone,
+        'email': email,
         'isAdmin': isAdmin,
         'lastLogin': FieldValue.serverTimestamp(),
+        'enrolledCourses': FieldValue.arrayUnion([]),
+        'orders': FieldValue.arrayUnion([]),
+        'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint("Login record error: $e");
     }
   }
 
+  Future<void> _saveUserProfileToFirestore(User user, {String? phone}) async {
+    try {
+      final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final docSnap = await docRef.get();
+      if (!docSnap.exists) {
+        await docRef.set({
+          'name': user.displayName ?? user.email ?? 'طالب hy Academy',
+          'phone': phone ?? user.phoneNumber ?? '',
+          'email': user.email,
+          'uid': user.uid,
+          'isAdmin': user.email == "hayyanmasri9@gmail.com",
+          'enrolledCourses': [],
+          'orders': [],
+          'lastLogin': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        await docRef.update({
+          'lastLogin': FieldValue.serverTimestamp(),
+          'name': user.displayName ?? user.email ?? 'طالب hy Academy',
+          'email': user.email,
+          'phone': phone ?? (docSnap.data()?['phone'] ?? ''),
+        });
+      }
+    } catch (e) {
+      debugPrint("Save user profile error: $e");
+    }
+  }
+
+  Future<Map<String, dynamic>?> _fetchUserProfile(String uid) async {
+    try {
+      final docSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (docSnap.exists) {
+        return docSnap.data() as Map<String, dynamic>?;
+      }
+    } catch (e) {
+      debugPrint("Fetch user profile error: $e");
+    }
+    return null;
+  }
+
   void _login() async {
     String phone = _phoneController.text.trim();
     String pass = _passwordController.text.trim();
     String name = _nameController.text.trim();
+
+    if (_isSignUp) {
+      if (name.isEmpty || phone.isEmpty || !phone.contains('+963') || pass.length < 6) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('الرجاء إدخال الاسم ورقم الهاتف وكلمة سر من 6 خانات على الأقل')),
+        );
+        return;
+      }
+      try {
+        UserCredential cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: '${phone.replaceAll('+', '')}@hyacademy.temp',
+          password: pass,
+        );
+        User? user = cred.user;
+        if (user != null) {
+          await user.updateDisplayName(name);
+          await user.reload();
+          user = FirebaseAuth.instance.currentUser;
+
+          await FirebaseFirestore.instance.collection('users').doc(user!.uid).set({
+            'name': name,
+            'phone': phone,
+            'email': user.email,
+            'uid': user!.uid,
+            'isAdmin': false,
+            'enrolledCourses': [],
+            'orders': [],
+            'lastLogin': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('is_logged_in', true);
+          await prefs.setString('user_name', name);
+          await prefs.setString('user_phone', phone);
+          await prefs.setString('user_uid', user!.uid);
+          await prefs.setString('user_email', user.email ?? '');
+          await prefs.setBool('is_admin', false);
+          await prefs.setStringList('admin_perms', []);
+          await prefs.setStringList('enrolled_courses', []);
+          await prefs.setStringList('user_orders', []);
+
+          if (!mounted) return;
+          Navigator.pop(context);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(
+                userName: name,
+                userPhone: phone,
+                userUid: user!.uid,
+                isAdmin: false,
+                adminPerms: [],
+              ),
+            ),
+          );
+        }
+      } on FirebaseAuthException catch (e) {
+        String msg = 'فشل إنشاء الحساب';
+        if (e.code == 'email-already-in-use') msg = 'هذا رقم الهاتف مسجل مسبقاً';
+        if (e.code == 'weak-password') msg = 'كلمة السر ضعيفة جداً';
+        if (e.code == 'invalid-email') msg = 'بيانات غير صحيحة';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$msg: ${e.message}')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل إنشاء الحساب: $e')),
+        );
+      }
+      return;
+    }
 
     if (phone.isEmpty || pass.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -714,7 +811,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _loginWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      final googleSignIn = GoogleSignIn(
+        clientId: kIsWeb ? '960269964659-6q7dpg469mibr1si6cfvv1cmeoo6klvq.apps.googleusercontent.com' : null,
+      );
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -730,19 +830,26 @@ class _LoginScreenState extends State<LoginScreen> {
         String name = user.displayName ?? googleUser.displayName ?? 'طالب hy Academy';
         String phone = user.phoneNumber ?? '+963900000000';
         String uid = user.uid;
+        String email = user.email ?? '';
 
         bool isAdmin = (user.email == "hayyanmasri9@gmail.com" || uid == "ADMIN-UID-$adminPhone");
         List<String> adminPerms = isAdmin ? ['all'] : [];
 
-        _recordNewUserLogin(name, phone, uid, isAdmin);
+        await _saveUserProfileToFirestore(user, phone: phone);
+        var profile = await _fetchUserProfile(uid);
+        List<String> enrolledCourses = (profile?['enrolledCourses'] as List?)?.cast<String>() ?? [];
+        List<String> orders = (profile?['orders'] as List?)?.cast<String>() ?? [];
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('is_logged_in', true);
         await prefs.setString('user_name', name);
         await prefs.setString('user_phone', phone);
         await prefs.setString('user_uid', uid);
+        await prefs.setString('user_email', email);
         await prefs.setBool('is_admin', isAdmin);
         await prefs.setStringList('admin_perms', adminPerms);
+        await prefs.setStringList('enrolled_courses', enrolledCourses);
+        await prefs.setStringList('user_orders', orders);
 
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -765,6 +872,222 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(content: Text('تعذر تسجيل الدخول عبر جوجل: $e')),
       );
     }
+  }
+
+  Future<void> _registerWithEmailAndPassword() async {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController(text: '+963');
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    bool _isRegistering = false;
+    bool _googleSignedIn = false;
+    String? _googleUid;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF14141C),
+          title: const Text('تسجيل حساب جديد', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'الاسم الكامل (الثلاثي)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم الهاتف',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: emailCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'البريد الإلكتروني',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'كلمة السر (6 خانات أو أكثر)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE52521))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+                    onPressed: () async {
+                      try {
+                        final googleSignIn = GoogleSignIn(
+                          clientId: kIsWeb ? '960269964659-6q7dpg469mibr1si6cfvv1cmeoo6klvq.apps.googleusercontent.com' : null,
+                        );
+                        final googleUser = await googleSignIn.signIn();
+                        if (googleUser == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('يجب تسجيل الدخول عبر جوجل لإكمال إنشاء الحساب')),
+                          );
+                          return;
+                        }
+                        setDialogState(() {
+                          _googleSignedIn = true;
+                          _googleUid = googleUser.id;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم التحقق من حساب جوجل بنجاح ✅')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('فشل التحقق من جوجل: $e')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 20),
+                    label: _googleSignedIn
+                        ? const Text('تم الربط مع جوجل ✅', style: TextStyle(color: Colors.white, fontSize: 14))
+                        : const Text('ربط حساب جوجل (إجباري)', style: TextStyle(color: Colors.white, fontSize: 14)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _googleSignedIn ? '✔ تم التحقق من هوية جوجل' : '⚠ يجب ربط حساب جوجل قبل الإكمال',
+                  style: TextStyle(
+                    color: _googleSignedIn ? Colors.green : Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE52521)),
+              onPressed: _isRegistering
+                  ? null
+                  : () async {
+                      final name = nameCtrl.text.trim();
+                      final phone = phoneCtrl.text.trim();
+                      final email = emailCtrl.text.trim();
+                      final pass = passCtrl.text.trim();
+
+                      if (name.isEmpty || phone.isEmpty || email.isEmpty || !email.contains('@') || pass.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('الرجاء ملء جميع الحقول بشكل صحيح (اسم، هاتف، بريد إلكتروني، كلمة سر 6+ خانات)')),
+                        );
+                        return;
+                      }
+
+                      if (!_googleSignedIn) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('يجب إكمال ربط حساب جوجل قبل إنشاء الحساب')),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => _isRegistering = true);
+                      try {
+                        UserCredential cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+                          email: email,
+                          password: pass,
+                        );
+                        User? user = cred.user;
+                        if (user != null) {
+                          await user.updateDisplayName(name);
+                          await user.reload();
+                          user = FirebaseAuth.instance.currentUser;
+
+                          await FirebaseFirestore.instance.collection('users').doc(user!.uid).set({
+                            'name': name,
+                            'phone': phone,
+                            'email': email,
+                            'uid': user!.uid,
+                            'googleUid': _googleUid,
+                            'isAdmin': false,
+                            'enrolledCourses': [],
+                            'orders': [],
+                            'lastLogin': FieldValue.serverTimestamp(),
+                            'createdAt': FieldValue.serverTimestamp(),
+                          });
+
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool('is_logged_in', true);
+                          await prefs.setString('user_name', name);
+                          await prefs.setString('user_phone', phone);
+                          await prefs.setString('user_uid', user!.uid);
+                          await prefs.setString('user_email', email);
+                          await prefs.setBool('is_admin', false);
+                          await prefs.setStringList('admin_perms', []);
+                          await prefs.setStringList('enrolled_courses', []);
+                          await prefs.setStringList('user_orders', []);
+
+                          if (!mounted) return;
+                          Navigator.pop(ctx);
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => HomeScreen(
+                                userName: name,
+                                userPhone: phone,
+                                userUid: user!.uid,
+                                isAdmin: false,
+                                adminPerms: [],
+                              ),
+                            ),
+                          );
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        String msg = 'فشل التسجيل';
+                        if (e.code == 'email-already-in-use') msg = 'هذا البريد الإلكتروني مستخدم مسبقاً';
+                        if (e.code == 'weak-password') msg = 'كلمة السر ضعيفة جداً';
+                        if (e.code == 'invalid-email') msg = 'بريد إلكتروني غير صحيح';
+                        ScaffoldMessenger.of(context).showSnackBar(
+                           SnackBar(content: Text('$msg: ${e.message}')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                           SnackBar(content: Text('فشل التسجيل: $e')),
+                        );
+                      } finally {
+                        if (context.mounted) setDialogState(() => _isRegistering = false);
+                      }
+                    },
+              child: _isRegistering
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('تسجيل حساب', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -886,13 +1209,38 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 30),
 
-                              _buildInputField(
-                                controller: _nameController,
-                                label: 'الاسم الثلاثي',
-                                icon: Icons.person_rounded,
-                                isDark: isDark,
+                              // Toggle بين تسجيل الدخول وإنشاء حساب
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    'ليس لديك حساب؟ ',
+                                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => setState(() => _isSignUp = !_isSignUp),
+                                    child: Text(
+                                      _isSignUp ? 'تسجيل الدخول' : 'إنشاء حساب جديد',
+                                      style: const TextStyle(
+                                        color: Color(0xFFE52521),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 20),
+
+                              if (_isSignUp) ...[
+                                _buildInputField(
+                                  controller: _nameController,
+                                  label: 'الاسم الثلاثي',
+                                  icon: Icons.person_rounded,
+                                  isDark: isDark,
+                                ),
+                                const SizedBox(height: 16),
+                              ],
                               _buildInputField(
                                 controller: _phoneController,
                                 label: 'رقم الهاتف (+963...)',
@@ -923,15 +1271,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ],
                                 ),
                                 child: ElevatedButton(
-                                  onPressed: _login,
+                                  onPressed: _isSignUp ? _registerWithEmailAndPassword : _login,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.transparent,
                                     shadowColor: Colors.transparent,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                                   ),
-                                  child: const Text(
-                                    'تسجيل الدخول',
-                                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                                  child: Text(
+                                    _isSignUp ? 'إنشاء حساب جديد' : 'تسجيل الدخول',
+                                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
                                   ),
                                 ),
                               ),
@@ -950,6 +1298,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                     icon: const Icon(Icons.g_mobiledata, color: Color(0xFFE52521), size: 32),
                                     label: const Text(
                                       'تسجيل الدخول عبر جوجل',
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  height: 54,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF1E1E28),
+                                      foregroundColor: Colors.white,
+                                      elevation: 4,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    ),
+                                    onPressed: () => setState(() => _isSignUp = !_isSignUp),
+                                    icon: const Icon(Icons.person_add_rounded, color: Color(0xFFE52521), size: 32),
+                                    label: const Text(
+                                      'التبديل بين التسجيل والدخول',
                                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                                     ),
                                   ),
@@ -1048,13 +1414,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
+      String arabicMsg = 'فشل الإرسال';
+      if (e.code == 'user-not-found') arabicMsg = 'هذا البريد الإلكتروني غير مسجل في النظام';
+      if (e.code == 'invalid-email') arabicMsg = 'تنسيق البريد الإلكتروني غير صحيح';
+      if (e.code == 'too-many-requests') arabicMsg = 'كثير من الطلبات، حاول مرة أخرى لاحقاً';
+      if (e.code == 'network-request-failed') arabicMsg = 'تأكد من اتصالك بالإنترنت';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل الإرسال: ${e.message}'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text('$arabicMsg (${e.message})')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل الإرسال: $e'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text('فشل الإرسال: $e')),
       );
     } finally {
       if (mounted) setState(() => _isSending = false);
@@ -1548,7 +1919,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (list.isEmpty) const ListTile(title: Text('لا توجد ملفات محملة', style: TextStyle(color: Colors.grey))),
+                      if (list.isEmpty) const ListTile(title: Text('لا توجد ملفات محملة عبر الرابط', style: TextStyle(color: Colors.grey))),
                       ...list.map((u) => ListTile(
                         leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
                         title: Text(u.split('/').last, style: const TextStyle(color: Colors.white, fontSize: 12)),
@@ -1557,6 +1928,44 @@ class _HomeScreenState extends State<HomeScreen> {
                           if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                         },
                       )),
+                    ],
+                  );
+                },
+              ),
+              const Divider(color: Colors.white12, height: 30),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: const Text('الملفات المحملة (أوفلاين)', style: TextStyle(color: Color(0xFFE52521), fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+              ),
+              FutureBuilder<List<String>>(
+                future: SharedPreferences.getInstance().then((p) => p.getStringList('local_pdfs') ?? []),
+                builder: (context, snapshot) {
+                  List<String> localList = snapshot.data ?? [];
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (localList.isEmpty) const ListTile(title: Text('لا توجد ملفات محملة محلياً', style: TextStyle(color: Colors.grey))),
+                      ...localList.map((entry) {
+                        var parts = entry.split('|');
+                        String filePath = parts.length > 1 ? parts[1] : '';
+                        String fileName = parts.length > 2 ? parts[2] : 'ملف PDF';
+                        return ListTile(
+                          leading: const Icon(Icons.picture_as_pdf, color: Colors.greenAccent),
+                          title: Text(fileName, style: const TextStyle(color: Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis),
+                          subtitle: const Text('ملف محلي - يعمل بدون إنترنت', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                          onTap: () async {
+                            if (filePath.isNotEmpty) {
+                              final result = await OpenFilex.open(filePath);
+                              if (!mounted) return;
+                              if (result.type != ResultType.done) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('تعذر فتح الملف: ${result.message}'), backgroundColor: Colors.redAccent),
+                                );
+                              }
+                            }
+                          },
+                        );
+                      }).toList(),
                     ],
                   );
                 },
@@ -1651,307 +2060,342 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStoreTab(bool isDark) {
-    return Column(
-      children: [
-        TweenAnimationBuilder<double>(
-          tween: Tween<double>(begin: 0.95, end: 1.0),
-          duration: const Duration(seconds: 2),
-          builder: (context, scale, child) {
-            return Transform.scale(
-              scale: scale,
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.all(8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2E1A22), Color(0xFF14141C), Color(0xFF1F1218)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE52521).withOpacity(0.6), width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE52521).withOpacity(0.25),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+    return CustomScrollView(
+      slivers: [
+        // Welcome banner (scrolls with content)
+        SliverToBoxAdapter(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0.95, end: 1.0),
+            duration: const Duration(seconds: 2),
+            builder: (context, scale, child) {
+              return Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2E1A22), Color(0xFF14141C), Color(0xFF1F1218)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Welcome to hy Academy',
-                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'كل ما يحتاجه الطالب الجامعي تجده هنا',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'أهلاً بك، ${widget.userName}',
-                      style: const TextStyle(
-                        color: Colors.amberAccent,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE52521).withOpacity(0.6), width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFE52521).withOpacity(0.25),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          child: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: 'ابحث عن منتج أو عرض في المتجر...',
-              prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE52521), size: 20),
-              filled: true,
-              fillColor: const Color(0xFF1E1E28),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-            onChanged: (val) => setState(() => searchQuery = val.trim()),
-          ),
-        ),
-
-        SizedBox(
-          height: 32,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            itemCount: globalCategories.length,
-            itemBuilder: (context, index) {
-              String cat = globalCategories[index];
-              bool isSelected = selectedCategory == cat;
-              IconData icon = categoryIcons[cat] ?? Icons.category_rounded;
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: ChoiceChip(
-                  avatar: Icon(icon, color: isSelected ? Colors.white : const Color(0xFFE52521), size: 16),
-                  label: Text(cat, style: const TextStyle(fontSize: 12)),
-                  selected: isSelected,
-                  selectedColor: const Color(0xFFE52521),
-                  labelStyle: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold),
-                  onSelected: (_) => setState(() => selectedCategory = cat),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Welcome to hy Academy',
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'كل ما يحتاجه الطالب الجامعي تجده هنا',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'أهلاً بك، ${widget.userName}',
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
           ),
         ),
 
-        // Ad banner at top of store screen
-        StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('ads').doc('main_banner').snapshots(),
-          builder: (context, adSnapshot) {
-            if (!adSnapshot.hasData || !adSnapshot.data!.exists) return const SizedBox.shrink();
-            var adData = adSnapshot.data!.data() as Map<String, dynamic>?;
-            if (adData == null || (adData['isActive'] ?? false) != true) return const SizedBox.shrink();
-            String adUrl = adData['url'] ?? '';
-            if (adUrl.isEmpty) return const SizedBox.shrink();
-            return SizedBox(
-              height: 180,
-              child: InlineVideoAdCard(adData: adData),
-            );
-          },
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 8),
         ),
-        const SizedBox(height: 10),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-                stream: selectedCategory == 'العروض' 
-                    ? FirebaseFirestore.instance.collection('bundles').limit(100).snapshots() 
-                    : FirebaseFirestore.instance.collection('products').limit(100).snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE52521)));
-                  var docs = snapshot.data!.docs;
 
-                  var items = docs.map((d) {
-                    var data = d.data() as Map<String, dynamic>;
-                    data['id'] = d.id;
-                    return data;
-                  }).where((p) {
-                    bool matchCat = (selectedCategory == 'الكل' || selectedCategory == 'العروض' || p['category'] == selectedCategory);
-                    bool matchQuery = (searchQuery.isEmpty || p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase()));
-                    return matchCat && matchQuery;
-                  }).toList();
+        // Search bar (scrolls with content)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'ابحث عن منتج أو عرض في المتجر...',
+                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFE52521), size: 20),
+                filled: true,
+                fillColor: const Color(0xFF1E1E28),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              onChanged: (val) => setState(() => searchQuery = val.trim()),
+            ),
+          ),
+        ),
 
-                  if (items.isEmpty) return const Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey)));
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 8),
+        ),
 
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.72,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      var p = items[index];
-                      bool isFav = globalFavorites.contains(p['id']);
-                      String? discountBadge = p['discountBadge'];
+        // Category filter chips (scrolls with content)
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 32,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: globalCategories.length,
+              itemBuilder: (context, index) {
+                String cat = globalCategories[index];
+                bool isSelected = selectedCategory == cat;
+                IconData icon = categoryIcons[cat] ?? Icons.category_rounded;
 
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ProductDetailsScreen(
-                                product: p,
-                                userName: widget.userName,
-                                userPhone: widget.userPhone,
-                                userUid: widget.userUid,
-                                isAdmin: widget.isAdmin,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF181820) : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF2E2E3A)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Stack(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                      child: CachedNetworkImage(
-                                        imageUrl: p['image'] ?? '', 
-                                        fit: BoxFit.cover, 
-                                        width: double.infinity,
-                                        memCacheWidth: 300,
-                                        memCacheHeight: 300,
-                                        errorWidget: (context, url, error) => Container(
-                                          color: Colors.grey.shade900,
-                                          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                                        ),
-                                      ),
-                                    ),
-                                    if (discountBadge != null && discountBadge.isNotEmpty)
-                                      Positioned(
-                                        top: 6,
-                                        left: 6,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red,
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Text(
-                                            discountBadge,
-                                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                      ),
-                                    Positioned(
-                                      top: 6,
-                                      right: 6,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            if (isFav) {
-                                              globalFavorites.remove(p['id']);
-                                            } else {
-                                              globalFavorites.add(p['id']);
-                                            }
-                                          });
-                                        },
-                                        child: CircleAvatar(
-                                          backgroundColor: Colors.black54,
-                                          radius: 14,
-                                          child: Icon(
-                                            isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                            color: Colors.redAccent,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1),
-                                    const SizedBox(height: 2),
-                                    Text(p['price'] ?? '', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 12)),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: SizedBox(
-                                            height: 32,
-                                            child: ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.green,
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                              ),
-                                              onPressed: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => ProductDetailsScreen(product: p, userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin),
-                                                  ),
-                                                );
-                                              },
-                                              child: const Text('طلب', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        IconButton(
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                          icon: const Icon(Icons.add_shopping_cart_rounded, color: Color(0xFFE52521), size: 20),
-                                          onPressed: () {
-                                            globalCart.add({
-                                              'title': p['title'],
-                                              'price': p['price'],
-                                              'priceNum': p['priceNum'] ?? 0,
-                                              'currency': p['currency'] ?? 'ل.س',
-                                              'image': p['image'],
-                                              'qty': 1,
-                                            });
-                                            setState(() {});
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج إلى سلة المشتريات 🛒')));
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: ChoiceChip(
+                    avatar: Icon(icon, color: isSelected ? Colors.white : const Color(0xFFE52521), size: 16),
+                    label: Text(cat, style: const TextStyle(fontSize: 12)),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFFE52521),
+                    labelStyle: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold),
+                    onSelected: (_) => setState(() => selectedCategory = cat),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 8),
+        ),
+
+        // Ad banner at top of store screen (scrolls with content)
+        SliverToBoxAdapter(
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('ads').doc('main_banner').snapshots(),
+            builder: (context, adSnapshot) {
+              if (!adSnapshot.hasData || !adSnapshot.data!.exists) return const SizedBox.shrink();
+              var adData = adSnapshot.data!.data() as Map<String, dynamic>?;
+              if (adData == null || (adData['isActive'] ?? false) != true) return const SizedBox.shrink();
+              String adUrl = adData['url'] ?? '';
+              if (adUrl.isEmpty) return const SizedBox.shrink();
+              return SizedBox(
+                height: 180,
+                child: InlineVideoAdCard(adData: adData, autoPlay: bannerAutoPlay),
+              );
+            },
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 10),
+        ),
+
+        // Product grid — takes full remaining vertical space
+        StreamBuilder<QuerySnapshot>(
+          stream: selectedCategory == 'العروض'
+              ? FirebaseFirestore.instance.collection('bundles').limit(100).snapshots()
+              : FirebaseFirestore.instance.collection('products').limit(100).snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator(color: Color(0xFFE52521))),
+              );
+            }
+            var docs = snapshot.data!.docs;
+
+            var items = docs.map((d) {
+              var data = d.data() as Map<String, dynamic>;
+              data['id'] = d.id;
+              return data;
+            }).where((p) {
+              bool matchCat = (selectedCategory == 'الكل' || selectedCategory == 'العروض' || p['category'] == selectedCategory);
+              bool matchQuery = (searchQuery.isEmpty || p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase()));
+              return matchCat && matchQuery;
+            }).toList();
+
+            if (items.isEmpty) {
+              return const SliverFillRemaining(
+                child: Center(child: Text('لا توجد منتجات أو عروض مضافة بعد', style: TextStyle(color: Colors.grey))),
+              );
+            }
+
+            return SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.72,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  var p = items[index];
+                  bool isFav = globalFavorites.contains(p['id']);
+                  String? discountBadge = p['discountBadge'];
+
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProductDetailsScreen(
+                            product: p,
+                            userName: widget.userName,
+                            userPhone: widget.userPhone,
+                            userUid: widget.userUid,
+                            isAdmin: widget.isAdmin,
                           ),
                         ),
                       );
                     },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF181820) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF2E2E3A)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                  child: CachedNetworkImage(
+                                    imageUrl: p['image'] ?? '',
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    memCacheWidth: 300,
+                                    memCacheHeight: 300,
+                                    errorWidget: (context, url, error) => Container(
+                                      color: Colors.grey.shade900,
+                                      child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                                    ),
+                                  ),
+                                ),
+                                if (discountBadge != null && discountBadge.isNotEmpty)
+                                  Positioned(
+                                    top: 6,
+                                    left: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        discountBadge,
+                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        if (isFav) {
+                                          globalFavorites.remove(p['id']);
+                                        } else {
+                                          globalFavorites.add(p['id']);
+                                        }
+                                      });
+                                    },
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      radius: 14,
+                                      child: Icon(
+                                        isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                        color: Colors.redAccent,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1),
+                                const SizedBox(height: 2),
+                                Text(p['price'] ?? '', style: const TextStyle(color: Color(0xFFE52521), fontWeight: FontWeight.w900, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: SizedBox(
+                                        height: 32,
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.green,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => ProductDetailsScreen(product: p, userName: widget.userName, userPhone: widget.userPhone, userUid: widget.userUid, isAdmin: widget.isAdmin),
+                                              ),
+                                            );
+                                          },
+                                          child: const Text('طلب', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      constraints: const BoxConstraints(),
+                                      padding: EdgeInsets.zero,
+                                      icon: const Icon(Icons.add_shopping_cart_rounded, color: Color(0xFFE52521), size: 20),
+                                      onPressed: () {
+                                        globalCart.add({
+                                          'title': p['title'],
+                                          'price': p['price'],
+                                          'priceNum': p['priceNum'] ?? 0,
+                                          'currency': p['currency'] ?? 'ل.س',
+                                          'image': p['image'],
+                                          'qty': 1,
+                                        });
+                                        setState(() {});
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المنتج إلى سلة المشتريات 🛒')));
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 },
+                childCount: items.length,
               ),
-            ),
-          ],
-        );
-    }
+            );
+          },
+        ),
+      ],
+    );
+  }
   Widget _buildProfileTab() {
     return Center(
       child: Column(
@@ -1991,7 +2435,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class InlineVideoAdCard extends StatefulWidget {
   final Map<String, dynamic> adData;
-  const InlineVideoAdCard({super.key, required this.adData});
+  final bool autoPlay;
+  const InlineVideoAdCard({super.key, required this.adData, this.autoPlay = true});
 
   @override
   State<InlineVideoAdCard> createState() => _InlineVideoAdCardState();
@@ -2000,13 +2445,14 @@ class InlineVideoAdCard extends StatefulWidget {
 class _InlineVideoAdCardState extends State<InlineVideoAdCard> {
   VideoPlayerController? _videoController;
   bool _isInitialized = false;
+  bool _isPausedByUser = false;
 
   @override
   void initState() {
     super.initState();
     String url = widget.adData['url'] ?? '';
     bool isVideo = widget.adData['isVideo'] ?? false;
-    if (isVideo && url.isNotEmpty) {
+    if (isVideo && url.isNotEmpty && widget.autoPlay) {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
         ..initialize().then((_) {
           if (mounted) {
@@ -2017,6 +2463,20 @@ class _InlineVideoAdCardState extends State<InlineVideoAdCard> {
             _videoController?.play();
           }
         });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant InlineVideoAdCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.autoPlay != widget.autoPlay) {
+      if (!widget.autoPlay) {
+        _videoController?.pause();
+        _isPausedByUser = true;
+      } else if (_isPausedByUser) {
+        _videoController?.play();
+        _isPausedByUser = false;
+      }
     }
   }
 
@@ -2052,8 +2512,10 @@ class _InlineVideoAdCardState extends State<InlineVideoAdCard> {
                       setState(() {
                         if (_videoController!.value.isPlaying) {
                           _videoController!.pause();
+                          _isPausedByUser = true;
                         } else {
                           _videoController!.play();
+                          _isPausedByUser = false;
                         }
                       });
                     },
@@ -2171,10 +2633,18 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   int quantity = 1;
   final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _recipientPhoneController = TextEditingController();
 
   void _orderViaWhatsApp() async {
+    String recipientPhone = _recipientPhoneController.text.trim();
     String location = _locationController.text.trim();
 
+    if (recipientPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرجاء إدخال رقم هاتف المستلم لإتمام الطلب')),
+      );
+      return;
+    }
     if (location.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الرجاء إدخال مكان التوصيل أو الجامعة بالتفصيل')),
@@ -2201,6 +2671,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         "• السعر الإجمالي: $totalPrice $currency\n"
         "• اسم الزبون: ${widget.userName}\n"
         "• هاتف الزبون: ${widget.userPhone}\n"
+        "• هاتف المستلم: $recipientPhone\n"
         "• مكان التوصيل/الجامعة: $location";
 
     String waUrl = 'https://wa.me/$activeWhatsApp?text=${Uri.encodeComponent(orderMsg)}';
@@ -2418,6 +2889,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             const SizedBox(height: 16),
 
             TextField(
+              controller: _recipientPhoneController,
+              decoration: const InputDecoration(
+                labelText: 'رقم هاتف المستلم (إجباري)',
+                prefixIcon: Icon(Icons.phone_rounded, color: Color(0xFFE52521)),
+                filled: true,
+              ),
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 16),
+
+            TextField(
               controller: _locationController,
               decoration: const InputDecoration(
                 labelText: 'مكان التوصيل أو الجامعة بالتفصيل',
@@ -2550,6 +3032,23 @@ class _CoursesAcademyTabState extends State<CoursesAcademyTab> {
                         await launchUrl(uri, mode: LaunchMode.externalApplication);
                       }
                     },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: '+963967834966'));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نسخ رقم الواتساب بنجاح')));
+                  },
+                  child: RichText(
+                    text: const TextSpan(
+                      style: TextStyle(color: Color(0xFFE52521), fontSize: 13, decoration: TextDecoration.underline),
+                      children: [
+                        TextSpan(text: 'لحل المشاكل في الشراء او طلب الكود يدويا تواصل مع الادارة عبر واتس اب '),
+                        TextSpan(text: '+963967834966', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                   ),
                 ),
                 const Divider(color: Colors.white24, height: 25),
@@ -3068,9 +3567,9 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
           children: [
             SizedBox(
               height: 240,
-              child: url.isEmpty
+              child: url.isEmpty && (lec['videoId'] ?? '').isEmpty
                   ? const Center(child: Text('لا يوجد فيديو لهذه المحاضرة', style: TextStyle(color: Colors.grey)))
-                  : CourseYouTubePlayerWidget(videoUrlOrId: url),
+                  : CourseYouTubePlayerWidget(videoUrlOrId: (lec['videoId'] ?? url).isNotEmpty ? (lec['videoId'] ?? url) : url),
             ),
             const SizedBox(height: 16),
             Row(
@@ -3131,6 +3630,28 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
                       } : null,
                       child: const Text('تنزيل PDF', style: TextStyle(fontSize: 12)),
                     ),
+                    const SizedBox(width: 6),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: pdfUrl.isNotEmpty ? Colors.blue : Colors.grey,
+                      ),
+                      onPressed: pdfUrl.isNotEmpty ? () async {
+                        String fileName = pdfUrl.split('/').last;
+                        if (fileName.isEmpty) fileName = 'lecture_${currentIndex + 1}.pdf';
+                        String? localPath = await downloadPdfToLocal(pdfUrl, fileName);
+                        if (!mounted) return;
+                        if (localPath != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('تم تنزيل الملف محلياً بنجاح ✅')),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('فشل تنزيل الملف محلياً')),
+                          );
+                        }
+                      } : null,
+                      child: const Text('تحميل محلي', style: TextStyle(fontSize: 11)),
+                    ),
                   ],
                 ),
               ),
@@ -3168,18 +3689,20 @@ class CourseYouTubePlayerWidget extends StatefulWidget {
   State<CourseYouTubePlayerWidget> createState() => _CourseYouTubePlayerWidgetState();
 }
 
+String extractYoutubeVideoId(String url) {
+  final regExp = RegExp(
+    r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+    caseSensitive: false,
+    unicode: true,
+  );
+  final match = regExp.firstMatch(url);
+  return match?.group(1) ?? url;
+}
+
 class _CourseYouTubePlayerWidgetState extends State<CourseYouTubePlayerWidget> {
   late YoutubePlayerController _playerController;
 
-  String extractVideoId(String url) {
-    final regExp = RegExp(
-      r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
-      caseSensitive: false,
-      unicode: true,
-    );
-    final match = regExp.firstMatch(url);
-    return match?.group(1) ?? url;
-  }
+  String extractVideoId(String url) => extractYoutubeVideoId(url);
 
   @override
   void initState() {
@@ -3187,11 +3710,12 @@ class _CourseYouTubePlayerWidgetState extends State<CourseYouTubePlayerWidget> {
     String vidId = extractVideoId(widget.videoUrlOrId);
     _playerController = YoutubePlayerController.fromVideoId(
       videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
-      autoPlay: false,
       params: const YoutubePlayerParams(
         showControls: true,
         showFullscreenButton: true,
         strictRelatedVideos: true,
+        showVideoAnnotations: false,
+        enableJavaScript: false,
       ),
     );
   }
@@ -3204,11 +3728,12 @@ class _CourseYouTubePlayerWidgetState extends State<CourseYouTubePlayerWidget> {
       String vidId = extractVideoId(widget.videoUrlOrId);
       _playerController = YoutubePlayerController.fromVideoId(
         videoId: vidId.isNotEmpty ? vidId : 'dQw4w9WgXcQ',
-        autoPlay: false,
         params: const YoutubePlayerParams(
           showControls: true,
           showFullscreenButton: true,
           strictRelatedVideos: true,
+          showVideoAnnotations: false,
+          enableJavaScript: false,
         ),
       );
     }
@@ -3422,8 +3947,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       String fileName = 'ads/${DateTime.now().millisecondsSinceEpoch}.mp4';
       final bytes = await video.readAsBytes();
-      await Supabase.instance.client.storage.from('images').uploadBinary(fileName, bytes);
-      String downloadUrl = Supabase.instance.client.storage.from('images').getPublicUrl(fileName);
+      Reference ref = FirebaseStorage.instance.ref().child(fileName);
+      UploadTask uploadTask = ref.putData(bytes);
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
 
       setState(() {
         _adUrlController.text = downloadUrl;
@@ -3461,8 +3988,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       } else {
         bytes = await File(result.files.single.path!).readAsBytes();
       }
-      await Supabase.instance.client.storage.from('images').uploadBinary(fileName, bytes);
-      return Supabase.instance.client.storage.from('images').getPublicUrl(fileName);
+      Reference ref = FirebaseStorage.instance.ref().child(fileName);
+      UploadTask uploadTask = ref.putData(bytes);
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+      return downloadUrl;
     } catch (e) {
       debugPrint("PDF Upload error: $e");
       return null;
@@ -3597,8 +4127,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
       String pdf = lec['pdf'] as String;
       String qb = lec['questionBank'] as String;
       if (url.isNotEmpty) {
+        String extractedVideoId = extractYoutubeVideoId(url);
         lecturesList.add({
           'title': title.isNotEmpty ? title : 'محاضرة',
+          'videoId': extractedVideoId,
           'url': url,
           'pdfUrl': pdf,
           'questionBankUrl': qb,
@@ -3607,7 +4139,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
 
     if (lecturesList.isEmpty) {
-      lecturesList.add({'title': 'المحاضرة الأولى', 'url': '', 'pdfUrl': '', 'questionBankUrl': ''});
+      lecturesList.add({'title': 'المحاضرة الأولى', 'videoId': '', 'url': '', 'pdfUrl': '', 'questionBankUrl': ''});
     }
 
     int priceNum = int.tryParse(_coursePriceController.text) ?? 25000;
@@ -4807,6 +5339,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 value: _isAdActive,
                 activeColor: Colors.green,
                 onChanged: (val) => setState(() => _isAdActive = val),
+              ),
+              SwitchListTile(
+                title: const Text('التشغيل التلقائي للإعلان (Auto-play)', style: TextStyle(color: Colors.white)),
+                subtitle: const Text('إيقاف التشغيل التلقائي لوقف حركة الإعلانات', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                value: bannerAutoPlay,
+                activeColor: Colors.green,
+                onChanged: (val) => setState(() => bannerAutoPlay = val),
               ),
               const SizedBox(height: 20),
               Row(
