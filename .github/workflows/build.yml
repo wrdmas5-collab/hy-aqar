@@ -1,0 +1,84 @@
+name: Build HY STORE (Android & iOS)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Firebase Android App ID
+        env:
+          FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+        run: |
+          if [ -z "$FIREBASE_ANDROID_APP_ID" ]; then
+            echo "::error::Add FIREBASE_ANDROID_APP_ID to GitHub repository secrets."
+            exit 1
+          fi
+
+      - name: Set up Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart sources
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Generate Launcher Icons
+        run: dart run flutter_launcher_icons
+
+      - name: Build Android APK
+        run: flutter build apk --release --dart-define=FIREBASE_ANDROID_APP_ID=${{ secrets.FIREBASE_ANDROID_APP_ID }}
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Generate Launcher Icons
+        run: dart run flutter_launcher_icons
+
+      - name: Build iOS Release
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload iOS Files Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-files
+          path: build/ios/iphoneos/Runner.app

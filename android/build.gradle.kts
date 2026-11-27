@@ -1,0 +1,40 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
+
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+// Disable AAR metadata for all subprojects (AGP 9+)
+gradle.projectsEvaluated {
+    subprojects {
+        tasks.configureEach {
+            if (name.contains("AarMetadata")) {
+                enabled = false
+            }
+            // Disable BundleAar tasks that cause metadata check issues
+            if (name == "bundleReleaseAar" || name == "bundleDebugAar") {
+                enabled = false
+            }
+        }
+    }
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
+}
